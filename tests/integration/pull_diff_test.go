@@ -1,0 +1,68 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package integration
+
+import (
+	"net/http"
+	"testing"
+
+	"github.com/kumose/kmup/tests"
+
+	"github.com/PuerkitoBio/goquery"
+	"github.com/stretchr/testify/assert"
+)
+
+func TestPullDiff_CompletePRDiff(t *testing.T) {
+	doTestPRDiff(t, "/user2/commitsonpr/pulls/1/files", false, []string{"test1.txt", "test10.txt", "test2.txt", "test3.txt", "test4.txt", "test5.txt", "test6.txt", "test7.txt", "test8.txt", "test9.txt"})
+}
+
+func TestPullDiff_SingleCommitPRDiff(t *testing.T) {
+	doTestPRDiff(t, "/user2/commitsonpr/pulls/1/commits/c5626fc9eff57eb1bb7b796b01d4d0f2f3f792a2", true, []string{"test3.txt"})
+}
+
+func TestPullDiff_CommitRangePRDiff(t *testing.T) {
+	doTestPRDiff(t, "/user2/commitsonpr/pulls/1/files/4ca8bcaf27e28504df7bf996819665986b01c847..23576dd018294e476c06e569b6b0f170d0558705", true, []string{"test2.txt", "test3.txt", "test4.txt"})
+}
+
+func doTestPRDiff(t *testing.T, prDiffURL string, reviewBtnDisabled bool, expectedFilenames []string) {
+	defer tests.PrepareTestEnv(t)()
+
+	session := loginUser(t, "user2")
+
+	req := NewRequest(t, "GET", "/user2/commitsonpr/pulls")
+	session.MakeRequest(t, req, http.StatusOK)
+
+	// Get the given PR diff url
+	req = NewRequest(t, "GET", prDiffURL)
+	resp := session.MakeRequest(t, req, http.StatusOK)
+	doc := NewHTMLParser(t, resp.Body)
+
+	// Assert all files are visible.
+	fileContents := doc.doc.Find(".file-content")
+	numberOfFiles := fileContents.Length()
+
+	assert.Equal(t, len(expectedFilenames), numberOfFiles)
+
+	fileContents.Each(func(i int, s *goquery.Selection) {
+		filename, _ := s.Attr("data-old-filename")
+		assert.Equal(t, expectedFilenames[i], filename)
+	})
+
+	// Ensure the review button is enabled for full PR reviews
+	assert.Equal(t, reviewBtnDisabled, doc.doc.Find(".js-btn-review").HasClass("disabled"))
+}

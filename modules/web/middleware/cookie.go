@@ -1,0 +1,102 @@
+// Copyright 2020 The Macaron Authors
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package middleware
+
+import (
+	"net/http"
+	"net/url"
+	"strings"
+
+	"github.com/kumose/kmup/modules/session"
+	"github.com/kumose/kmup/modules/setting"
+	"github.com/kumose/kmup/modules/util"
+)
+
+// SetRedirectToCookie convenience function to set the RedirectTo cookie consistently
+func SetRedirectToCookie(resp http.ResponseWriter, value string) {
+	SetSiteCookie(resp, "redirect_to", value, 0)
+}
+
+// DeleteRedirectToCookie convenience function to delete most cookies consistently
+func DeleteRedirectToCookie(resp http.ResponseWriter) {
+	SetSiteCookie(resp, "redirect_to", "", -1)
+}
+
+// GetSiteCookie returns given cookie value from request header.
+func GetSiteCookie(req *http.Request, name string) string {
+	cookie, err := req.Cookie(name)
+	if err != nil {
+		return ""
+	}
+	val, _ := url.QueryUnescape(cookie.Value)
+	return val
+}
+
+// SetSiteCookie returns given cookie value from request header.
+func SetSiteCookie(resp http.ResponseWriter, name, value string, maxAge int) {
+	// Previous versions would use a cookie path with a trailing /.
+	// These are more specific than cookies without a trailing /, so
+	// we need to delete these if they exist.
+	deleteLegacySiteCookie(resp, name)
+
+	// HINT: INSTALL-PAGE-COOKIE-INIT: the cookie system is not properly initialized on the Install page, so there is no CookiePath
+	cookie := &http.Cookie{
+		Name:     name,
+		Value:    url.QueryEscape(value),
+		MaxAge:   maxAge,
+		Path:     util.IfZero(setting.SessionConfig.CookiePath, "/"),
+		Domain:   setting.SessionConfig.Domain,
+		Secure:   setting.SessionConfig.Secure,
+		HttpOnly: true,
+		SameSite: setting.SessionConfig.SameSite,
+	}
+	resp.Header().Add("Set-Cookie", cookie.String())
+}
+
+// deleteLegacySiteCookie deletes the cookie with the given name at the cookie
+// path with a trailing /, which would unintentionally override the cookie.
+func deleteLegacySiteCookie(resp http.ResponseWriter, name string) {
+	if setting.SessionConfig.CookiePath == "" || strings.HasSuffix(setting.SessionConfig.CookiePath, "/") {
+		// If the cookie path ends with /, no legacy cookies will take
+		// precedence, so do nothing.  The exception is that cookies with no
+		// path could override other cookies, but it's complicated and we don't
+		// currently handle that.
+		return
+	}
+
+	cookie := &http.Cookie{
+		Name:     name,
+		Value:    "",
+		MaxAge:   -1,
+		Path:     setting.SessionConfig.CookiePath + "/",
+		Domain:   setting.SessionConfig.Domain,
+		Secure:   setting.SessionConfig.Secure,
+		HttpOnly: true,
+		SameSite: setting.SessionConfig.SameSite,
+	}
+	resp.Header().Add("Set-Cookie", cookie.String())
+}
+
+func init() {
+	session.BeforeRegenerateSession = append(session.BeforeRegenerateSession, func(resp http.ResponseWriter, _ *http.Request) {
+		// Ensure that a cookie with a trailing slash does not take precedence over
+		// the cookie written by the middleware.
+		deleteLegacySiteCookie(resp, setting.SessionConfig.CookieName)
+	})
+}

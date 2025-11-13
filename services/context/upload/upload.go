@@ -1,0 +1,138 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package upload
+
+import (
+	"mime"
+	"net/http"
+	"net/url"
+	"path"
+	"regexp"
+	"strings"
+
+	repo_model "github.com/kumose/kmup/models/repo"
+	"github.com/kumose/kmup/modules/log"
+	"github.com/kumose/kmup/modules/reqctx"
+	"github.com/kumose/kmup/modules/setting"
+	"github.com/kumose/kmup/services/context"
+)
+
+// ErrFileTypeForbidden not allowed file type error
+type ErrFileTypeForbidden struct {
+	Type string
+}
+
+// IsErrFileTypeForbidden checks if an error is a ErrFileTypeForbidden.
+func IsErrFileTypeForbidden(err error) bool {
+	_, ok := err.(ErrFileTypeForbidden)
+	return ok
+}
+
+func (err ErrFileTypeForbidden) Error() string {
+	return "This file cannot be uploaded or modified due to a forbidden file extension or type."
+}
+
+var wildcardTypeRe = regexp.MustCompile(`^[a-z]+/\*$`)
+
+// Verify validates whether a file is allowed to be uploaded. If buf is empty, it will just check if the file
+// has an allowed file extension.
+func Verify(buf []byte, fileName, allowedTypesStr string) error {
+	allowedTypesStr = strings.ReplaceAll(allowedTypesStr, "|", ",") // compat for old config format
+
+	allowedTypes := []string{}
+	for entry := range strings.SplitSeq(allowedTypesStr, ",") {
+		entry = strings.ToLower(strings.TrimSpace(entry))
+		if entry != "" {
+			allowedTypes = append(allowedTypes, entry)
+		}
+	}
+
+	if len(allowedTypes) == 0 {
+		return nil // everything is allowed
+	}
+
+	fullMimeType := http.DetectContentType(buf)
+	mimeType, _, err := mime.ParseMediaType(fullMimeType)
+	if err != nil {
+		log.Warn("Detected attachment type could not be parsed %s", fullMimeType)
+		return ErrFileTypeForbidden{Type: fullMimeType}
+	}
+	extension := strings.ToLower(path.Ext(fileName))
+	isBufEmpty := len(buf) <= 1
+
+	// https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input/file#Unique_file_type_specifiers
+	for _, allowEntry := range allowedTypes {
+		if allowEntry == "*/*" {
+			return nil // everything allowed
+		}
+		if strings.HasPrefix(allowEntry, ".") && allowEntry == extension {
+			return nil // extension is allowed
+		}
+		if isBufEmpty {
+			continue // skip mime type checks if buffer is empty
+		}
+		if mimeType == allowEntry {
+			return nil // mime type is allowed
+		}
+		if wildcardTypeRe.MatchString(allowEntry) && strings.HasPrefix(mimeType, allowEntry[:len(allowEntry)-1]) {
+			return nil // wildcard match, e.g. image/*
+		}
+	}
+
+	if !isBufEmpty {
+		log.Info("Attachment with type %s blocked from upload", fullMimeType)
+	}
+
+	return ErrFileTypeForbidden{Type: fullMimeType}
+}
+
+// AddUploadContext renders template values for dropzone
+func AddUploadContext(ctx *context.Context, uploadType string) {
+	switch uploadType {
+	case "release":
+		ctx.Data["UploadUrl"] = ctx.Repo.RepoLink + "/releases/attachments"
+		ctx.Data["UploadRemoveUrl"] = ctx.Repo.RepoLink + "/releases/attachments/remove"
+		ctx.Data["UploadLinkUrl"] = ctx.Repo.RepoLink + "/releases/attachments"
+		ctx.Data["UploadAccepts"] = strings.ReplaceAll(setting.Repository.Release.AllowedTypes, "|", ",")
+		ctx.Data["UploadMaxFiles"] = setting.Attachment.MaxFiles
+		ctx.Data["UploadMaxSize"] = setting.Attachment.MaxSize
+	case "comment":
+		ctx.Data["UploadUrl"] = ctx.Repo.RepoLink + "/issues/attachments"
+		ctx.Data["UploadRemoveUrl"] = ctx.Repo.RepoLink + "/issues/attachments/remove"
+		if len(ctx.PathParam("index")) > 0 {
+			ctx.Data["UploadLinkUrl"] = ctx.Repo.RepoLink + "/issues/" + url.PathEscape(ctx.PathParam("index")) + "/attachments"
+		} else {
+			ctx.Data["UploadLinkUrl"] = ctx.Repo.RepoLink + "/issues/attachments"
+		}
+		ctx.Data["UploadAccepts"] = strings.ReplaceAll(setting.Attachment.AllowedTypes, "|", ",")
+		ctx.Data["UploadMaxFiles"] = setting.Attachment.MaxFiles
+		ctx.Data["UploadMaxSize"] = setting.Attachment.MaxSize
+	default:
+		setting.PanicInDevOrTesting("Invalid upload type: %s", uploadType)
+	}
+}
+
+func AddUploadContextForRepo(ctx reqctx.RequestContext, repo *repo_model.Repository) {
+	ctxData, repoLink := ctx.GetData(), repo.Link()
+	ctxData["UploadUrl"] = repoLink + "/upload-file"
+	ctxData["UploadRemoveUrl"] = repoLink + "/upload-remove"
+	ctxData["UploadLinkUrl"] = repoLink + "/upload-file"
+	ctxData["UploadAccepts"] = strings.ReplaceAll(setting.Repository.Upload.AllowedTypes, "|", ",")
+	ctxData["UploadMaxFiles"] = setting.Repository.Upload.MaxFiles
+	ctxData["UploadMaxSize"] = setting.Repository.Upload.FileMaxSize
+}

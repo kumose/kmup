@@ -1,0 +1,131 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package actions
+
+import (
+	"context"
+
+	"github.com/kumose/kmup/models/db"
+	repo_model "github.com/kumose/kmup/models/repo"
+	"github.com/kumose/kmup/modules/container"
+	"github.com/kumose/kmup/modules/timeutil"
+
+	"xorm.io/builder"
+)
+
+type ActionJobList []*ActionRunJob
+
+func (jobs ActionJobList) GetRunIDs() []int64 {
+	return container.FilterSlice(jobs, func(j *ActionRunJob) (int64, bool) {
+		return j.RunID, j.RunID != 0
+	})
+}
+
+func (jobs ActionJobList) LoadRepos(ctx context.Context) error {
+	repoIDs := container.FilterSlice(jobs, func(j *ActionRunJob) (int64, bool) {
+		return j.RepoID, j.RepoID != 0 && j.Repo == nil
+	})
+	if len(repoIDs) == 0 {
+		return nil
+	}
+
+	repos := make(map[int64]*repo_model.Repository, len(repoIDs))
+	if err := db.GetEngine(ctx).In("id", repoIDs).Find(&repos); err != nil {
+		return err
+	}
+	for _, j := range jobs {
+		if j.RepoID > 0 && j.Repo == nil {
+			j.Repo = repos[j.RepoID]
+		}
+	}
+	return nil
+}
+
+func (jobs ActionJobList) LoadRuns(ctx context.Context, withRepo bool) error {
+	if withRepo {
+		if err := jobs.LoadRepos(ctx); err != nil {
+			return err
+		}
+	}
+
+	runIDs := jobs.GetRunIDs()
+	runs := make(map[int64]*ActionRun, len(runIDs))
+	if err := db.GetEngine(ctx).In("id", runIDs).Find(&runs); err != nil {
+		return err
+	}
+	for _, j := range jobs {
+		if j.RunID > 0 && j.Run == nil {
+			j.Run = runs[j.RunID]
+			j.Run.Repo = j.Repo
+		}
+	}
+	return nil
+}
+
+func (jobs ActionJobList) LoadAttributes(ctx context.Context, withRepo bool) error {
+	return jobs.LoadRuns(ctx, withRepo)
+}
+
+type FindRunJobOptions struct {
+	db.ListOptions
+	RunID            int64
+	RepoID           int64
+	OwnerID          int64
+	CommitSHA        string
+	Statuses         []Status
+	UpdatedBefore    timeutil.TimeStamp
+	ConcurrencyGroup string
+}
+
+func (opts FindRunJobOptions) ToConds() builder.Cond {
+	cond := builder.NewCond()
+	if opts.RunID > 0 {
+		cond = cond.And(builder.Eq{"`action_run_job`.run_id": opts.RunID})
+	}
+	if opts.RepoID > 0 {
+		cond = cond.And(builder.Eq{"`action_run_job`.repo_id": opts.RepoID})
+	}
+	if opts.CommitSHA != "" {
+		cond = cond.And(builder.Eq{"`action_run_job`.commit_sha": opts.CommitSHA})
+	}
+	if len(opts.Statuses) > 0 {
+		cond = cond.And(builder.In("`action_run_job`.status", opts.Statuses))
+	}
+	if opts.UpdatedBefore > 0 {
+		cond = cond.And(builder.Lt{"`action_run_job`.updated": opts.UpdatedBefore})
+	}
+	if opts.ConcurrencyGroup != "" {
+		if opts.RepoID == 0 {
+			panic("Invalid FindRunJobOptions: repo_id is required")
+		}
+		cond = cond.And(builder.Eq{"`action_run_job`.concurrency_group": opts.ConcurrencyGroup})
+	}
+	return cond
+}
+
+func (opts FindRunJobOptions) ToJoins() []db.JoinFunc {
+	if opts.OwnerID > 0 {
+		return []db.JoinFunc{
+			func(sess db.Engine) error {
+				sess.Join("INNER", "repository", "repository.id = repo_id AND repository.owner_id = ?", opts.OwnerID)
+				return nil
+			},
+		}
+	}
+	return nil
+}

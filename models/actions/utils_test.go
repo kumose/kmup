@@ -1,0 +1,104 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package actions
+
+import (
+	"math"
+	"testing"
+	"time"
+
+	"github.com/kumose/kmup/modules/timeutil"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestLogIndexes_ToDB(t *testing.T) {
+	tests := []struct {
+		indexes LogIndexes
+	}{
+		{
+			indexes: []int64{1, 2, 0, -1, -2, math.MaxInt64, math.MinInt64},
+		},
+	}
+	for _, tt := range tests {
+		t.Run("", func(t *testing.T) {
+			got, err := tt.indexes.ToDB()
+			require.NoError(t, err)
+
+			indexes := LogIndexes{}
+			require.NoError(t, indexes.FromDB(got))
+
+			assert.Equal(t, tt.indexes, indexes)
+		})
+	}
+}
+
+func Test_calculateDuration(t *testing.T) {
+	oldTimeSince := timeSince
+	defer func() {
+		timeSince = oldTimeSince
+	}()
+
+	timeSince = func(t time.Time) time.Duration {
+		return timeutil.TimeStamp(1000).AsTime().Sub(t)
+	}
+	type args struct {
+		started timeutil.TimeStamp
+		stopped timeutil.TimeStamp
+		status  Status
+	}
+	tests := []struct {
+		name string
+		args args
+		want time.Duration
+	}{
+		{
+			name: "unknown",
+			args: args{
+				started: 0,
+				stopped: 0,
+				status:  StatusUnknown,
+			},
+			want: 0,
+		},
+		{
+			name: "running",
+			args: args{
+				started: 500,
+				stopped: 0,
+				status:  StatusRunning,
+			},
+			want: 500 * time.Second,
+		},
+		{
+			name: "done",
+			args: args{
+				started: 500,
+				stopped: 600,
+				status:  StatusSuccess,
+			},
+			want: 100 * time.Second,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equalf(t, tt.want, calculateDuration(tt.args.started, tt.args.stopped, tt.args.status), "calculateDuration(%v, %v, %v)", tt.args.started, tt.args.stopped, tt.args.status)
+		})
+	}
+}

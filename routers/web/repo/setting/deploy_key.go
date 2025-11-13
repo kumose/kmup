@@ -1,0 +1,123 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package setting
+
+import (
+	"net/http"
+
+	asymkey_model "github.com/kumose/kmup/models/asymkey"
+	"github.com/kumose/kmup/models/db"
+	"github.com/kumose/kmup/modules/log"
+	"github.com/kumose/kmup/modules/setting"
+	"github.com/kumose/kmup/modules/web"
+	asymkey_service "github.com/kumose/kmup/services/asymkey"
+	"github.com/kumose/kmup/services/context"
+	"github.com/kumose/kmup/services/forms"
+)
+
+// DeployKeys render the deploy keys list of a repository page
+func DeployKeys(ctx *context.Context) {
+	ctx.Data["Title"] = ctx.Tr("repo.settings.deploy_keys") + " / " + ctx.Tr("secrets.secrets")
+	ctx.Data["PageIsSettingsKeys"] = true
+	ctx.Data["DisableSSH"] = setting.SSH.Disabled
+
+	keys, err := db.Find[asymkey_model.DeployKey](ctx, asymkey_model.ListDeployKeysOptions{RepoID: ctx.Repo.Repository.ID})
+	if err != nil {
+		ctx.ServerError("ListDeployKeys", err)
+		return
+	}
+	ctx.Data["Deploykeys"] = keys
+
+	ctx.HTML(http.StatusOK, tplDeployKeys)
+}
+
+// DeployKeysPost response for adding a deploy key of a repository
+func DeployKeysPost(ctx *context.Context) {
+	form := web.GetForm(ctx).(*forms.AddKeyForm)
+	ctx.Data["Title"] = ctx.Tr("repo.settings.deploy_keys")
+	ctx.Data["PageIsSettingsKeys"] = true
+	ctx.Data["DisableSSH"] = setting.SSH.Disabled
+
+	keys, err := db.Find[asymkey_model.DeployKey](ctx, asymkey_model.ListDeployKeysOptions{RepoID: ctx.Repo.Repository.ID})
+	if err != nil {
+		ctx.ServerError("ListDeployKeys", err)
+		return
+	}
+	ctx.Data["Deploykeys"] = keys
+
+	if ctx.HasError() {
+		ctx.HTML(http.StatusOK, tplDeployKeys)
+		return
+	}
+
+	content, err := asymkey_model.CheckPublicKeyString(form.Content)
+	if err != nil {
+		if db.IsErrSSHDisabled(err) {
+			ctx.Flash.Info(ctx.Tr("settings.ssh_disabled"))
+		} else if asymkey_model.IsErrKeyUnableVerify(err) {
+			ctx.Flash.Info(ctx.Tr("form.unable_verify_ssh_key"))
+		} else if err == asymkey_model.ErrKeyIsPrivate {
+			ctx.Data["HasError"] = true
+			ctx.Data["Err_Content"] = true
+			ctx.Flash.Error(ctx.Tr("form.must_use_public_key"))
+		} else {
+			ctx.Data["HasError"] = true
+			ctx.Data["Err_Content"] = true
+			ctx.Flash.Error(ctx.Tr("form.invalid_ssh_key", err.Error()))
+		}
+		ctx.Redirect(ctx.Repo.RepoLink + "/settings/keys")
+		return
+	}
+
+	key, err := asymkey_model.AddDeployKey(ctx, ctx.Repo.Repository.ID, form.Title, content, !form.IsWritable)
+	if err != nil {
+		ctx.Data["HasError"] = true
+		switch {
+		case asymkey_model.IsErrDeployKeyAlreadyExist(err):
+			ctx.Data["Err_Content"] = true
+			ctx.RenderWithErr(ctx.Tr("repo.settings.key_been_used"), tplDeployKeys, &form)
+		case asymkey_model.IsErrKeyAlreadyExist(err):
+			ctx.Data["Err_Content"] = true
+			ctx.RenderWithErr(ctx.Tr("settings.ssh_key_been_used"), tplDeployKeys, &form)
+		case asymkey_model.IsErrKeyNameAlreadyUsed(err):
+			ctx.Data["Err_Title"] = true
+			ctx.RenderWithErr(ctx.Tr("repo.settings.key_name_used"), tplDeployKeys, &form)
+		case asymkey_model.IsErrDeployKeyNameAlreadyUsed(err):
+			ctx.Data["Err_Title"] = true
+			ctx.RenderWithErr(ctx.Tr("repo.settings.key_name_used"), tplDeployKeys, &form)
+		default:
+			ctx.ServerError("AddDeployKey", err)
+		}
+		return
+	}
+
+	log.Trace("Deploy key added: %d", ctx.Repo.Repository.ID)
+	ctx.Flash.Success(ctx.Tr("repo.settings.add_key_success", key.Name))
+	ctx.Redirect(ctx.Repo.RepoLink + "/settings/keys")
+}
+
+// DeleteDeployKey response for deleting a deploy key
+func DeleteDeployKey(ctx *context.Context) {
+	if err := asymkey_service.DeleteDeployKey(ctx, ctx.Repo.Repository, ctx.FormInt64("id")); err != nil {
+		ctx.Flash.Error("DeleteDeployKey: " + err.Error())
+	} else {
+		ctx.Flash.Success(ctx.Tr("repo.settings.deploy_key_deletion_success"))
+	}
+
+	ctx.JSONRedirect(ctx.Repo.RepoLink + "/settings/keys")
+}

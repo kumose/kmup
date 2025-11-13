@@ -1,0 +1,109 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package context
+
+import (
+	"net/http"
+	"slices"
+
+	auth_model "github.com/kumose/kmup/models/auth"
+	repo_model "github.com/kumose/kmup/models/repo"
+	"github.com/kumose/kmup/models/unit"
+)
+
+// RequireRepoAdmin returns a middleware for requiring repository admin permission
+func RequireRepoAdmin() func(ctx *Context) {
+	return func(ctx *Context) {
+		if !ctx.IsSigned || !ctx.Repo.IsAdmin() {
+			ctx.NotFound(nil)
+			return
+		}
+	}
+}
+
+// CanWriteToBranch checks if the user is allowed to write to the branch of the repo
+func CanWriteToBranch() func(ctx *Context) {
+	return func(ctx *Context) {
+		if !ctx.Repo.CanWriteToBranch(ctx, ctx.Doer, ctx.Repo.BranchName) {
+			ctx.NotFound(nil)
+			return
+		}
+	}
+}
+
+// RequireUnitWriter returns a middleware for requiring repository write to one of the unit permission
+func RequireUnitWriter(unitTypes ...unit.Type) func(ctx *Context) {
+	return func(ctx *Context) {
+		if slices.ContainsFunc(unitTypes, ctx.Repo.CanWrite) {
+			return
+		}
+		ctx.NotFound(nil)
+	}
+}
+
+// RequireUnitReader returns a middleware for requiring repository write to one of the unit permission
+func RequireUnitReader(unitTypes ...unit.Type) func(ctx *Context) {
+	return func(ctx *Context) {
+		for _, unitType := range unitTypes {
+			if ctx.Repo.CanRead(unitType) {
+				return
+			}
+			if unitType == unit.TypeCode && canWriteAsMaintainer(ctx) {
+				return
+			}
+		}
+		ctx.NotFound(nil)
+	}
+}
+
+// CheckRepoScopedToken check whether personal access token has repo scope
+func CheckRepoScopedToken(ctx *Context, repo *repo_model.Repository, level auth_model.AccessTokenScopeLevel) {
+	if !ctx.IsBasicAuth || ctx.Data["IsApiToken"] != true {
+		return
+	}
+
+	scope, ok := ctx.Data["ApiTokenScope"].(auth_model.AccessTokenScope)
+	if ok { // it's a personal access token but not oauth2 token
+		var scopeMatched bool
+
+		requiredScopes := auth_model.GetRequiredScopes(level, auth_model.AccessTokenScopeCategoryRepository)
+
+		// check if scope only applies to public resources
+		publicOnly, err := scope.PublicOnly()
+		if err != nil {
+			ctx.ServerError("HasScope", err)
+			return
+		}
+
+		if publicOnly && repo.IsPrivate {
+			ctx.HTTPError(http.StatusForbidden)
+			return
+		}
+
+		scopeMatched, err = scope.HasScope(requiredScopes...)
+		if err != nil {
+			ctx.ServerError("HasScope", err)
+			return
+		}
+
+		if !scopeMatched {
+			ctx.HTTPError(http.StatusForbidden)
+			return
+		}
+	}
+}

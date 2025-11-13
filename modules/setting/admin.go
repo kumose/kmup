@@ -1,0 +1,48 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package setting
+
+import (
+	"github.com/kumose/kmup/modules/container"
+)
+
+// Admin settings
+var Admin struct {
+	DisableRegularOrgCreation   bool
+	DefaultEmailNotification    string
+	UserDisabledFeatures        container.Set[string]
+	ExternalUserDisableFeatures container.Set[string]
+}
+
+func loadAdminFrom(rootCfg ConfigProvider) {
+	sec := rootCfg.Section("admin")
+	Admin.DisableRegularOrgCreation = sec.Key("DISABLE_REGULAR_ORG_CREATION").MustBool(false)
+	Admin.DefaultEmailNotification = sec.Key("DEFAULT_EMAIL_NOTIFICATIONS").MustString("enabled")
+	Admin.UserDisabledFeatures = container.SetOf(sec.Key("USER_DISABLED_FEATURES").Strings(",")...)
+	Admin.ExternalUserDisableFeatures = container.SetOf(sec.Key("EXTERNAL_USER_DISABLE_FEATURES").Strings(",")...).Union(Admin.UserDisabledFeatures)
+}
+
+const (
+	UserFeatureDeletion          = "deletion"
+	UserFeatureManageSSHKeys     = "manage_ssh_keys"
+	UserFeatureManageGPGKeys     = "manage_gpg_keys"
+	UserFeatureManageMFA         = "manage_mfa"
+	UserFeatureManageCredentials = "manage_credentials"
+	UserFeatureChangeUsername    = "change_username"
+	UserFeatureChangeFullName    = "change_full_name"
+)

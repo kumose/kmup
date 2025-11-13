@@ -1,0 +1,44 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+//go:build bindata
+
+//go:generate go run ../../build/generate-bindata.go ../../modules/migration/schemas bindata.dat
+
+package migration
+
+import (
+	"io"
+	"io/fs"
+	"path"
+	"sync"
+
+	_ "embed"
+
+	"github.com/kumose/kmup/modules/assetfs"
+)
+
+//go:embed bindata.dat
+var bindata []byte
+
+var BuiltinAssets = sync.OnceValue(func() fs.FS {
+	return assetfs.NewEmbeddedFS(bindata)
+})
+
+func openSchema(filename string) (io.ReadCloser, error) {
+	return BuiltinAssets().Open(path.Base(filename))
+}

@@ -1,0 +1,72 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package markdown_test
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/kumose/kmup/modules/markup"
+	"github.com/kumose/kmup/modules/markup/markdown"
+	"github.com/kumose/kmup/modules/svg"
+
+	"github.com/stretchr/testify/assert"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+)
+
+func TestAttention(t *testing.T) {
+	defer svg.MockIcon("octicon-info")()
+	defer svg.MockIcon("octicon-light-bulb")()
+	defer svg.MockIcon("octicon-report")()
+	defer svg.MockIcon("octicon-alert")()
+	defer svg.MockIcon("octicon-stop")()
+
+	test := func(input, expected string) {
+		result, err := markdown.RenderString(markup.NewTestRenderContext(), input)
+		assert.NoError(t, err)
+		assert.Equal(t, strings.TrimSpace(expected), strings.TrimSpace(string(result)))
+	}
+	renderAttention := func(attention, icon string) string {
+		tmpl := `<blockquote class="attention-header attention-{attention}"><p><svg class="attention-icon attention-{attention} svg {icon}" width="16" height="16"></svg><strong class="attention-{attention}">{Attention}</strong></p>`
+		tmpl = strings.ReplaceAll(tmpl, "{attention}", attention)
+		tmpl = strings.ReplaceAll(tmpl, "{icon}", icon)
+		tmpl = strings.ReplaceAll(tmpl, "{Attention}", cases.Title(language.English).String(attention))
+		return tmpl
+	}
+
+	test(`
+> [!NOTE]
+> text
+`, renderAttention("note", "octicon-info")+"\n<p>text</p>\n</blockquote>")
+
+	test(`> [!note]`, renderAttention("note", "octicon-info")+"\n</blockquote>")
+	test(`> [!tip]`, renderAttention("tip", "octicon-light-bulb")+"\n</blockquote>")
+	test(`> [!important]`, renderAttention("important", "octicon-report")+"\n</blockquote>")
+	test(`> [!warning]`, renderAttention("warning", "octicon-alert")+"\n</blockquote>")
+	test(`> [!caution]`, renderAttention("caution", "octicon-stop")+"\n</blockquote>")
+
+	// escaped by mdformat
+	test(`> \[!NOTE\]`, renderAttention("note", "octicon-info")+"\n</blockquote>")
+
+	// legacy GitHub style
+	test(`> **warning**`, renderAttention("warning", "octicon-alert")+"\n</blockquote>")
+
+	// edge case (it used to cause panic)
+	test(">\ntext", "<blockquote>\n</blockquote>\n<p>text</p>")
+}

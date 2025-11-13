@@ -1,0 +1,101 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package integration
+
+import (
+	"fmt"
+	"net/http"
+	"testing"
+
+	auth_model "github.com/kumose/kmup/models/auth"
+	repo_model "github.com/kumose/kmup/models/repo"
+	"github.com/kumose/kmup/models/unittest"
+	user_model "github.com/kumose/kmup/models/user"
+	"github.com/kumose/kmup/modules/gitrepo"
+	api "github.com/kumose/kmup/modules/structs"
+	"github.com/kumose/kmup/modules/util"
+	"github.com/kumose/kmup/tests"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func TestAPIGitTags(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	// Login as User2.
+	session := loginUser(t, user.Name)
+	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadRepository)
+
+	// Set up git config for the tagger
+	_ = gitrepo.GitConfigSet(t.Context(), repo, "user.name", user.Name)
+	_ = gitrepo.GitConfigSet(t.Context(), repo, "user.email", user.Email)
+
+	gitRepo, _ := gitrepo.OpenRepository(t.Context(), repo)
+	defer gitRepo.Close()
+
+	commit, _ := gitRepo.GetBranchCommit("master")
+	lTagName := "lightweightTag"
+	gitRepo.CreateTag(lTagName, commit.ID.String())
+
+	aTagName := "annotatedTag"
+	aTagMessage := "my annotated message"
+	gitRepo.CreateAnnotatedTag(aTagName, aTagMessage, commit.ID.String())
+	aTag, _ := gitRepo.GetTag(aTagName)
+
+	// SHOULD work for annotated tags
+	req := NewRequestf(t, "GET", "/api/v1/repos/%s/%s/git/tags/%s", user.Name, repo.Name, aTag.ID.String()).
+		AddTokenAuth(token)
+	res := MakeRequest(t, req, http.StatusOK)
+
+	var tag *api.AnnotatedTag
+	DecodeJSON(t, res, &tag)
+
+	assert.Equal(t, aTagName, tag.Tag)
+	assert.Equal(t, aTag.ID.String(), tag.SHA)
+	assert.Equal(t, commit.ID.String(), tag.Object.SHA)
+	assert.Equal(t, aTagMessage+"\n", tag.Message)
+	assert.Equal(t, user.Name, tag.Tagger.Name)
+	assert.Equal(t, user.Email, tag.Tagger.Email)
+	assert.Equal(t, util.URLJoin(repo.APIURL(), "git/tags", aTag.ID.String()), tag.URL)
+
+	// Should NOT work for lightweight tags
+	badReq := NewRequestf(t, "GET", "/api/v1/repos/%s/%s/git/tags/%s", user.Name, repo.Name, commit.ID.String()).
+		AddTokenAuth(token)
+	MakeRequest(t, badReq, http.StatusBadRequest)
+}
+
+func TestAPIDeleteTagByName(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: repo.OwnerID})
+	session := loginUser(t, owner.LowerName)
+	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository)
+
+	req := NewRequest(t, http.MethodDelete, fmt.Sprintf("/api/v1/repos/%s/%s/tags/delete-tag", owner.Name, repo.Name)).
+		AddTokenAuth(token)
+	_ = MakeRequest(t, req, http.StatusNoContent)
+
+	// Make sure that actual releases can't be deleted outright
+	createNewReleaseUsingAPI(t, token, owner, repo, "release-tag", "", "Release Tag", "test")
+
+	req = NewRequest(t, http.MethodDelete, fmt.Sprintf("/api/v1/repos/%s/%s/tags/release-tag", owner.Name, repo.Name)).
+		AddTokenAuth(token)
+	_ = MakeRequest(t, req, http.StatusConflict)
+}

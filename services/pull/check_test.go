@@ -1,0 +1,128 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package pull
+
+import (
+	"strconv"
+	"testing"
+	"time"
+
+	"github.com/kumose/kmup/models/db"
+	issues_model "github.com/kumose/kmup/models/issues"
+	"github.com/kumose/kmup/models/pull"
+	repo_model "github.com/kumose/kmup/models/repo"
+	"github.com/kumose/kmup/models/unittest"
+	user_model "github.com/kumose/kmup/models/user"
+	"github.com/kumose/kmup/modules/graceful"
+	"github.com/kumose/kmup/modules/queue"
+	"github.com/kumose/kmup/modules/setting"
+	"github.com/kumose/kmup/modules/test"
+	"github.com/kumose/kmup/services/automergequeue"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestPullRequest_AddToTaskQueue(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	idChan := make(chan int64, 10)
+	testHandler := func(items ...string) []string {
+		for _, s := range items {
+			id, _ := strconv.ParseInt(s, 10, 64)
+			idChan <- id
+		}
+		return nil
+	}
+
+	cfg, err := setting.GetQueueSettings(setting.CfgProvider, "pr_patch_checker")
+	assert.NoError(t, err)
+	prPatchCheckerQueue, err = queue.NewWorkerPoolQueueWithContext(t.Context(), "pr_patch_checker", cfg, testHandler, true)
+	assert.NoError(t, err)
+
+	pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2})
+	StartPullRequestCheckImmediately(t.Context(), pr)
+
+	assert.Eventually(t, func() bool {
+		pr = unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2})
+		return pr.Status == issues_model.PullRequestStatusChecking
+	}, 1*time.Second, 100*time.Millisecond)
+
+	has, err := prPatchCheckerQueue.Has(strconv.FormatInt(pr.ID, 10))
+	assert.True(t, has)
+	assert.NoError(t, err)
+
+	go prPatchCheckerQueue.Run()
+
+	select {
+	case id := <-idChan:
+		assert.Equal(t, pr.ID, id)
+	case <-time.After(time.Second):
+		assert.FailNow(t, "Timeout: nothing was added to pullRequestQueue")
+	}
+
+	has, err = prPatchCheckerQueue.Has(strconv.FormatInt(pr.ID, 10))
+	assert.False(t, has)
+	assert.NoError(t, err)
+
+	pr = unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2})
+	assert.Equal(t, issues_model.PullRequestStatusChecking, pr.Status)
+
+	prPatchCheckerQueue.ShutdownWait(time.Second)
+	prPatchCheckerQueue = nil
+}
+
+func TestMarkPullRequestAsMergeable(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	prPatchCheckerQueue = queue.CreateUniqueQueue(graceful.GetManager().ShutdownContext(), "pr_patch_checker", func(items ...string) []string { return nil })
+	go prPatchCheckerQueue.Run()
+	defer func() {
+		prPatchCheckerQueue.ShutdownWait(time.Second)
+		prPatchCheckerQueue = nil
+	}()
+
+	addToQueueShaChan := make(chan string, 1)
+	defer test.MockVariableValue(&automergequeue.AddToQueue, func(pr *issues_model.PullRequest, sha string) {
+		addToQueueShaChan <- sha
+	})()
+	ctx := t.Context()
+	_, _ = db.GetEngine(ctx).ID(2).Update(&issues_model.PullRequest{Status: issues_model.PullRequestStatusChecking})
+	pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2})
+	require.False(t, pr.HasMerged)
+	require.Equal(t, issues_model.PullRequestStatusChecking, pr.Status)
+
+	err := pull.ScheduleAutoMerge(ctx, &user_model.User{ID: 99999}, pr.ID, repo_model.MergeStyleMerge, "test msg", true)
+	require.NoError(t, err)
+
+	exist, scheduleMerge, err := pull.GetScheduledMergeByPullID(ctx, pr.ID)
+	require.NoError(t, err)
+	assert.True(t, exist)
+	assert.True(t, scheduleMerge.Doer.IsGhost())
+
+	markPullRequestAsMergeable(ctx, pr)
+	pr = unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2})
+	require.Equal(t, issues_model.PullRequestStatusMergeable, pr.Status)
+
+	select {
+	case sha := <-addToQueueShaChan:
+		assert.Equal(t, "985f0301dba5e7b34be866819cd15ad3d8f508ee", sha) // ref: refs/pull/3/head
+	case <-time.After(1 * time.Second):
+		assert.FailNow(t, "Timeout: nothing was added to automergequeue")
+	}
+}

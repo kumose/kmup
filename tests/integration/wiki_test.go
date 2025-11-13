@@ -1,0 +1,132 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package integration
+
+import (
+	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	auth_model "github.com/kumose/kmup/models/auth"
+	"github.com/kumose/kmup/modules/git"
+	api "github.com/kumose/kmup/modules/structs"
+	"github.com/kumose/kmup/modules/util"
+	"github.com/kumose/kmup/tests"
+
+	"github.com/PuerkitoBio/goquery"
+	"github.com/stretchr/testify/assert"
+)
+
+func assertFileExist(t *testing.T, p string) {
+	exist, err := util.IsExist(p)
+	assert.NoError(t, err)
+	assert.True(t, exist)
+}
+
+func assertFileEqual(t *testing.T, p string, content []byte) {
+	bs, err := os.ReadFile(p)
+	assert.NoError(t, err)
+	assert.Equal(t, content, bs)
+}
+
+func TestRepoCloneWiki(t *testing.T) {
+	onKmupRun(t, func(t *testing.T, u *url.URL) {
+		defer tests.PrepareTestEnv(t)()
+
+		dstPath := t.TempDir()
+
+		r := u.String() + "user2/repo1.wiki.git"
+		u, _ = url.Parse(r)
+		u.User = url.UserPassword("user2", userPassword)
+		t.Run("Clone", func(t *testing.T) {
+			assert.NoError(t, git.Clone(t.Context(), u.String(), dstPath, git.CloneRepoOptions{}))
+			assertFileEqual(t, filepath.Join(dstPath, "Home.md"), []byte("# Home page\n\nThis is the home page!\n"))
+			assertFileExist(t, filepath.Join(dstPath, "Page-With-Image.md"))
+			assertFileExist(t, filepath.Join(dstPath, "Page-With-Spaced-Name.md"))
+			assertFileExist(t, filepath.Join(dstPath, "images"))
+			assertFileExist(t, filepath.Join(dstPath, "files/Non-Renderable-File.zip"))
+			assertFileExist(t, filepath.Join(dstPath, "jpeg.jpg"))
+		})
+	})
+}
+
+func Test_RepoWikiPages(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	url := "/user2/repo1/wiki/?action=_pages"
+	req := NewRequest(t, "GET", url)
+	resp := MakeRequest(t, req, http.StatusOK)
+
+	doc := NewHTMLParser(t, resp.Body)
+	expectedPagePaths := []string{
+		"Home", "Page-With-Image", "Page-With-Spaced-Name", "Unescaped-File",
+	}
+	doc.Find("tr").Each(func(i int, s *goquery.Selection) {
+		firstAnchor := s.Find("a").First()
+		href, _ := firstAnchor.Attr("href")
+		pagePath := strings.TrimPrefix(href, "/user2/repo1/wiki/")
+
+		assert.Equal(t, expectedPagePaths[i], pagePath)
+	})
+}
+
+func Test_WikiClone(t *testing.T) {
+	onKmupRun(t, func(t *testing.T, u *url.URL) {
+		username := "user2"
+		reponame := "repo1"
+		wikiPath := username + "/" + reponame + ".wiki.git"
+		keyname := "my-testing-key"
+		baseAPITestContext := NewAPITestContext(t, username, "repo1", auth_model.AccessTokenScopeWriteRepository, auth_model.AccessTokenScopeWriteUser)
+
+		u.Path = wikiPath
+
+		t.Run("Clone HTTP", func(t *testing.T) {
+			defer tests.PrintCurrentTest(t)()
+
+			dstLocalPath := t.TempDir()
+			assert.NoError(t, git.Clone(t.Context(), u.String(), dstLocalPath, git.CloneRepoOptions{}))
+			content, err := os.ReadFile(filepath.Join(dstLocalPath, "Home.md"))
+			assert.NoError(t, err)
+			assert.Equal(t, "# Home page\n\nThis is the home page!\n", string(content))
+		})
+
+		t.Run("Clone SSH", func(t *testing.T) {
+			defer tests.PrintCurrentTest(t)()
+
+			dstLocalPath := t.TempDir()
+			sshURL := createSSHUrl(wikiPath, u)
+
+			withKeyFile(t, keyname, func(keyFile string) {
+				var keyID int64
+				t.Run("CreateUserKey", doAPICreateUserKey(baseAPITestContext, "test-key", keyFile, func(t *testing.T, key api.PublicKey) {
+					keyID = key.ID
+				}))
+				assert.NotZero(t, keyID)
+
+				// Setup clone folder
+				assert.NoError(t, git.Clone(t.Context(), sshURL.String(), dstLocalPath, git.CloneRepoOptions{}))
+				content, err := os.ReadFile(filepath.Join(dstLocalPath, "Home.md"))
+				assert.NoError(t, err)
+				assert.Equal(t, "# Home page\n\nThis is the home page!\n", string(content))
+			})
+		})
+	})
+}

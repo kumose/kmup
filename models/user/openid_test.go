@@ -1,0 +1,71 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package user_test
+
+import (
+	"testing"
+
+	"github.com/kumose/kmup/models/unittest"
+	user_model "github.com/kumose/kmup/models/user"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestGetUserOpenIDs(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	oids, err := user_model.GetUserOpenIDs(t.Context(), int64(1))
+	if assert.NoError(t, err) && assert.Len(t, oids, 2) {
+		assert.Equal(t, "https://user1.domain1.tld/", oids[0].URI)
+		assert.False(t, oids[0].Show)
+		assert.Equal(t, "http://user1.domain2.tld/", oids[1].URI)
+		assert.True(t, oids[1].Show)
+	}
+
+	oids, err = user_model.GetUserOpenIDs(t.Context(), int64(2))
+	if assert.NoError(t, err) && assert.Len(t, oids, 1) {
+		assert.Equal(t, "https://domain1.tld/user2/", oids[0].URI)
+		assert.True(t, oids[0].Show)
+	}
+}
+
+func TestToggleUserOpenIDVisibility(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+	oids, err := user_model.GetUserOpenIDs(t.Context(), int64(2))
+	require.NoError(t, err)
+	require.Len(t, oids, 1)
+	assert.True(t, oids[0].Show)
+
+	err = user_model.ToggleUserOpenIDVisibility(t.Context(), oids[0].ID)
+	require.NoError(t, err)
+
+	oids, err = user_model.GetUserOpenIDs(t.Context(), int64(2))
+	require.NoError(t, err)
+	require.Len(t, oids, 1)
+
+	assert.False(t, oids[0].Show)
+	err = user_model.ToggleUserOpenIDVisibility(t.Context(), oids[0].ID)
+	require.NoError(t, err)
+
+	oids, err = user_model.GetUserOpenIDs(t.Context(), int64(2))
+	require.NoError(t, err)
+	if assert.Len(t, oids, 1) {
+		assert.True(t, oids[0].Show)
+	}
+}

@@ -1,0 +1,166 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package repo
+
+import (
+	"errors"
+	"net/http"
+
+	issues_model "github.com/kumose/kmup/models/issues"
+	api "github.com/kumose/kmup/modules/structs"
+	"github.com/kumose/kmup/modules/web"
+	"github.com/kumose/kmup/services/context"
+)
+
+// LockIssue lock an issue
+func LockIssue(ctx *context.APIContext) {
+	// swagger:operation PUT /repos/{owner}/{repo}/issues/{index}/lock issue issueLockIssue
+	// ---
+	// summary: Lock an issue
+	// consumes:
+	// - application/json
+	// produces:
+	// - application/json
+	// parameters:
+	// - name: owner
+	//   in: path
+	//   description: owner of the repo
+	//   type: string
+	//   required: true
+	// - name: repo
+	//   in: path
+	//   description: name of the repo
+	//   type: string
+	//   required: true
+	// - name: index
+	//   in: path
+	//   description: index of the issue
+	//   type: integer
+	//   format: int64
+	//   required: true
+	// - name: body
+	//   in: body
+	//   schema:
+	//     "$ref": "#/definitions/LockIssueOption"
+	// responses:
+	//   "204":
+	//     "$ref": "#/responses/empty"
+	//   "403":
+	//     "$ref": "#/responses/forbidden"
+	//   "404":
+	//     "$ref": "#/responses/notFound"
+
+	reason := web.GetForm(ctx).(*api.LockIssueOption).Reason
+	issue, err := issues_model.GetIssueByIndex(ctx, ctx.Repo.Repository.ID, ctx.PathParamInt64("index"))
+	if err != nil {
+		if issues_model.IsErrIssueNotExist(err) {
+			ctx.APIErrorNotFound(err)
+		} else {
+			ctx.APIErrorInternal(err)
+		}
+		return
+	}
+
+	if !ctx.Repo.CanWriteIssuesOrPulls(issue.IsPull) {
+		ctx.APIError(http.StatusForbidden, errors.New("no permission to lock this issue"))
+		return
+	}
+
+	if !issue.IsLocked {
+		opt := &issues_model.IssueLockOptions{
+			Doer:   ctx.ContextUser,
+			Issue:  issue,
+			Reason: reason,
+		}
+
+		issue.Repo = ctx.Repo.Repository
+		err = issues_model.LockIssue(ctx, opt)
+		if err != nil {
+			ctx.APIErrorInternal(err)
+			return
+		}
+	}
+
+	ctx.Status(http.StatusNoContent)
+}
+
+// UnlockIssue unlock an issue
+func UnlockIssue(ctx *context.APIContext) {
+	// swagger:operation DELETE /repos/{owner}/{repo}/issues/{index}/lock issue issueUnlockIssue
+	// ---
+	// summary: Unlock an issue
+	// consumes:
+	// - application/json
+	// produces:
+	// - application/json
+	// parameters:
+	// - name: owner
+	//   in: path
+	//   description: owner of the repo
+	//   type: string
+	//   required: true
+	// - name: repo
+	//   in: path
+	//   description: name of the repo
+	//   type: string
+	//   required: true
+	// - name: index
+	//   in: path
+	//   description: index of the issue
+	//   type: integer
+	//   format: int64
+	//   required: true
+	// responses:
+	//   "204":
+	//     "$ref": "#/responses/empty"
+	//   "403":
+	//     "$ref": "#/responses/forbidden"
+	//   "404":
+	//     "$ref": "#/responses/notFound"
+
+	issue, err := issues_model.GetIssueByIndex(ctx, ctx.Repo.Repository.ID, ctx.PathParamInt64("index"))
+	if err != nil {
+		if issues_model.IsErrIssueNotExist(err) {
+			ctx.APIErrorNotFound(err)
+		} else {
+			ctx.APIErrorInternal(err)
+		}
+		return
+	}
+
+	if !ctx.Repo.CanWriteIssuesOrPulls(issue.IsPull) {
+		ctx.APIError(http.StatusForbidden, errors.New("no permission to unlock this issue"))
+		return
+	}
+
+	if issue.IsLocked {
+		opt := &issues_model.IssueLockOptions{
+			Doer:  ctx.ContextUser,
+			Issue: issue,
+		}
+
+		issue.Repo = ctx.Repo.Repository
+		err = issues_model.UnlockIssue(ctx, opt)
+		if err != nil {
+			ctx.APIErrorInternal(err)
+			return
+		}
+	}
+
+	ctx.Status(http.StatusNoContent)
+}

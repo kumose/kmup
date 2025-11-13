@@ -1,0 +1,103 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package lfs
+
+import (
+	"bytes"
+	"context"
+	"io"
+	"net/http"
+
+	"github.com/kumose/kmup/modules/json"
+	"github.com/kumose/kmup/modules/log"
+)
+
+// TransferAdapter represents an adapter for downloading/uploading LFS objects.
+type TransferAdapter interface {
+	Name() string
+	Download(ctx context.Context, l *Link) (io.ReadCloser, error)
+	Upload(ctx context.Context, l *Link, p Pointer, r io.Reader) error
+	Verify(ctx context.Context, l *Link, p Pointer) error
+}
+
+// BasicTransferAdapter implements the "basic" adapter.
+type BasicTransferAdapter struct {
+	client *http.Client
+}
+
+// Name returns the name of the adapter.
+func (a *BasicTransferAdapter) Name() string {
+	return "basic"
+}
+
+// Download reads the download location and downloads the data.
+func (a *BasicTransferAdapter) Download(ctx context.Context, l *Link) (io.ReadCloser, error) {
+	req, err := createRequest(ctx, http.MethodGet, l.Href, l.Header, nil)
+	if err != nil {
+		return nil, err
+	}
+	log.Debug("Download Request: %+v", req)
+	resp, err := performRequest(ctx, a.client, req)
+	if err != nil {
+		return nil, err
+	}
+	return resp.Body, nil
+}
+
+// Upload sends the content to the LFS server.
+func (a *BasicTransferAdapter) Upload(ctx context.Context, l *Link, p Pointer, r io.Reader) error {
+	req, err := createRequest(ctx, http.MethodPut, l.Href, l.Header, r)
+	if err != nil {
+		return err
+	}
+	if req.Header.Get("Content-Type") == "" {
+		req.Header.Set("Content-Type", "application/octet-stream")
+	}
+	if req.Header.Get("Transfer-Encoding") == "chunked" {
+		req.TransferEncoding = []string{"chunked"}
+	}
+	req.ContentLength = p.Size
+
+	res, err := performRequest(ctx, a.client, req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	return nil
+}
+
+// Verify calls the verify handler on the LFS server
+func (a *BasicTransferAdapter) Verify(ctx context.Context, l *Link, p Pointer) error {
+	b, err := json.Marshal(p)
+	if err != nil {
+		log.Error("Error encoding json: %v", err)
+		return err
+	}
+
+	req, err := createRequest(ctx, http.MethodPost, l.Href, l.Header, bytes.NewReader(b))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", MediaType)
+	res, err := performRequest(ctx, a.client, req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	return nil
+}

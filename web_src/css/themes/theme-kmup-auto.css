@@ -1,0 +1,7 @@
+@import "./theme-kmup-light.css" (prefers-color-scheme: light);
+@import "./theme-kmup-dark.css" (prefers-color-scheme: dark);
+
+kmup-theme-meta-info {
+  --theme-display-name: "Auto";
+  --theme-color-scheme: "auto";
+}

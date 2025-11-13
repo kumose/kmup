@@ -1,0 +1,140 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package cache
+
+import (
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/kumose/kmup/modules/setting"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func createTestCache() {
+	defaultCache, _ = NewStringCache(setting.Cache{
+		Adapter: "memory",
+		TTL:     time.Minute,
+	})
+	setting.CacheService.TTL = 24 * time.Hour
+}
+
+func TestNewContext(t *testing.T) {
+	assert.NoError(t, Init())
+
+	setting.CacheService.Cache = setting.Cache{Adapter: "redis", Conn: "some random string"}
+	con, err := NewStringCache(setting.Cache{
+		Adapter:  "rand",
+		Conn:     "false conf",
+		Interval: 100,
+	})
+	assert.Error(t, err)
+	assert.Nil(t, con)
+}
+
+func TestTest(t *testing.T) {
+	defaultCache = nil
+	_, err := Test()
+	assert.Error(t, err)
+
+	createTestCache()
+	elapsed, err := Test()
+	assert.NoError(t, err)
+	// mem cache should take from 300ns up to 1ms on modern hardware ...
+	assert.Positive(t, elapsed)
+	assert.Less(t, elapsed, SlowCacheThreshold)
+}
+
+func TestGetCache(t *testing.T) {
+	createTestCache()
+
+	assert.NotNil(t, GetCache())
+}
+
+func TestGetString(t *testing.T) {
+	createTestCache()
+
+	data, err := GetString("key", func() (string, error) {
+		return "", errors.New("some error")
+	})
+	assert.Error(t, err)
+	assert.Empty(t, data)
+
+	data, err = GetString("key", func() (string, error) {
+		return "", nil
+	})
+	assert.NoError(t, err)
+	assert.Empty(t, data)
+
+	data, err = GetString("key", func() (string, error) {
+		return "some data", nil
+	})
+	assert.NoError(t, err)
+	assert.Empty(t, data)
+	Remove("key")
+
+	data, err = GetString("key", func() (string, error) {
+		return "some data", nil
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, "some data", data)
+
+	data, err = GetString("key", func() (string, error) {
+		return "", errors.New("some error")
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, "some data", data)
+	Remove("key")
+}
+
+func TestGetInt64(t *testing.T) {
+	createTestCache()
+
+	data, err := GetInt64("key", func() (int64, error) {
+		return 0, errors.New("some error")
+	})
+	assert.Error(t, err)
+	assert.EqualValues(t, 0, data)
+
+	data, err = GetInt64("key", func() (int64, error) {
+		return 0, nil
+	})
+	assert.NoError(t, err)
+	assert.EqualValues(t, 0, data)
+
+	data, err = GetInt64("key", func() (int64, error) {
+		return 100, nil
+	})
+	assert.NoError(t, err)
+	assert.EqualValues(t, 0, data)
+	Remove("key")
+
+	data, err = GetInt64("key", func() (int64, error) {
+		return 100, nil
+	})
+	assert.NoError(t, err)
+	assert.EqualValues(t, 100, data)
+
+	data, err = GetInt64("key", func() (int64, error) {
+		return 0, errors.New("some error")
+	})
+	assert.NoError(t, err)
+	assert.EqualValues(t, 100, data)
+	Remove("key")
+}

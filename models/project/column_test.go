@@ -1,0 +1,139 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package project
+
+import (
+	"fmt"
+	"testing"
+
+	"github.com/kumose/kmup/models/unittest"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func TestGetDefaultColumn(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	projectWithoutDefault, err := GetProjectByID(t.Context(), 5)
+	assert.NoError(t, err)
+
+	// check if default column was added
+	column, err := projectWithoutDefault.MustDefaultColumn(t.Context())
+	assert.NoError(t, err)
+	assert.Equal(t, int64(5), column.ProjectID)
+	assert.Equal(t, "Done", column.Title)
+
+	projectWithMultipleDefaults, err := GetProjectByID(t.Context(), 6)
+	assert.NoError(t, err)
+
+	// check if multiple defaults were removed
+	column, err = projectWithMultipleDefaults.MustDefaultColumn(t.Context())
+	assert.NoError(t, err)
+	assert.Equal(t, int64(6), column.ProjectID)
+	assert.Equal(t, int64(9), column.ID) // there are 2 default columns in the test data, use the latest one
+
+	// set 8 as default column
+	assert.NoError(t, SetDefaultColumn(t.Context(), column.ProjectID, 8))
+
+	// then 9 will become a non-default column
+	column, err = GetColumn(t.Context(), 9)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(6), column.ProjectID)
+	assert.False(t, column.Default)
+}
+
+func Test_moveIssuesToAnotherColumn(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	column1 := unittest.AssertExistsAndLoadBean(t, &Column{ID: 1, ProjectID: 1})
+
+	issues, err := column1.GetIssues(t.Context())
+	assert.NoError(t, err)
+	assert.Len(t, issues, 1)
+	assert.EqualValues(t, 1, issues[0].ID)
+
+	column2 := unittest.AssertExistsAndLoadBean(t, &Column{ID: 2, ProjectID: 1})
+	issues, err = column2.GetIssues(t.Context())
+	assert.NoError(t, err)
+	assert.Len(t, issues, 1)
+	assert.EqualValues(t, 3, issues[0].ID)
+
+	err = column1.moveIssuesToAnotherColumn(t.Context(), column2)
+	assert.NoError(t, err)
+
+	issues, err = column1.GetIssues(t.Context())
+	assert.NoError(t, err)
+	assert.Empty(t, issues)
+
+	issues, err = column2.GetIssues(t.Context())
+	assert.NoError(t, err)
+	assert.Len(t, issues, 2)
+	assert.EqualValues(t, 3, issues[0].ID)
+	assert.EqualValues(t, 0, issues[0].Sorting)
+	assert.EqualValues(t, 1, issues[1].ID)
+	assert.EqualValues(t, 1, issues[1].Sorting)
+}
+
+func Test_MoveColumnsOnProject(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	project1 := unittest.AssertExistsAndLoadBean(t, &Project{ID: 1})
+	columns, err := project1.GetColumns(t.Context())
+	assert.NoError(t, err)
+	assert.Len(t, columns, 3)
+	assert.EqualValues(t, 0, columns[0].Sorting) // even if there is no default sorting, the code should also work
+	assert.EqualValues(t, 0, columns[1].Sorting)
+	assert.EqualValues(t, 0, columns[2].Sorting)
+
+	err = MoveColumnsOnProject(t.Context(), project1, map[int64]int64{
+		0: columns[1].ID,
+		1: columns[2].ID,
+		2: columns[0].ID,
+	})
+	assert.NoError(t, err)
+
+	columnsAfter, err := project1.GetColumns(t.Context())
+	assert.NoError(t, err)
+	assert.Len(t, columnsAfter, 3)
+	assert.Equal(t, columns[1].ID, columnsAfter[0].ID)
+	assert.Equal(t, columns[2].ID, columnsAfter[1].ID)
+	assert.Equal(t, columns[0].ID, columnsAfter[2].ID)
+}
+
+func Test_NewColumn(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	project1 := unittest.AssertExistsAndLoadBean(t, &Project{ID: 1})
+	columns, err := project1.GetColumns(t.Context())
+	assert.NoError(t, err)
+	assert.Len(t, columns, 3)
+
+	for i := range maxProjectColumns - 3 {
+		err := NewColumn(t.Context(), &Column{
+			Title:     fmt.Sprintf("column-%d", i+4),
+			ProjectID: project1.ID,
+		})
+		assert.NoError(t, err)
+	}
+	err = NewColumn(t.Context(), &Column{
+		Title:     "column-21",
+		ProjectID: project1.ID,
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "maximum number of columns reached")
+}

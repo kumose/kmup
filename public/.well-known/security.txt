@@ -1,0 +1,4 @@
+# This site is running a Kmup instance.
+# Kmup related security problems could be reported to Kmup community.
+# Site related security problems should be reported to this site's admin.
+Preferred-Languages: en

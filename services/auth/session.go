@@ -1,0 +1,74 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package auth
+
+import (
+	"net/http"
+
+	user_model "github.com/kumose/kmup/models/user"
+	"github.com/kumose/kmup/modules/log"
+)
+
+// Ensure the struct implements the interface.
+var (
+	_ Method = &Session{}
+)
+
+// Session checks if there is a user uid stored in the session and returns the user
+// object for that uid.
+type Session struct{}
+
+// Name represents the name of auth method
+func (s *Session) Name() string {
+	return "session"
+}
+
+// Verify checks if there is a user uid stored in the session and returns the user
+// object for that uid.
+// Returns nil if there is no user uid stored in the session.
+func (s *Session) Verify(req *http.Request, w http.ResponseWriter, store DataStore, sess SessionStore) (*user_model.User, error) {
+	if sess == nil {
+		return nil, nil
+	}
+
+	// Get user ID
+	uid := sess.Get("uid")
+	if uid == nil {
+		return nil, nil
+	}
+	log.Trace("Session Authorization: Found user[%d]", uid)
+
+	id, ok := uid.(int64)
+	if !ok {
+		return nil, nil
+	}
+
+	// Get user object
+	user, err := user_model.GetUserByID(req.Context(), id)
+	if err != nil {
+		if !user_model.IsErrUserNotExist(err) {
+			log.Error("GetUserByID: %v", err)
+			// Return the err as-is to keep current signed-in session, in case the err is something like context.Canceled. Otherwise non-existing user (nil, nil) will make the caller clear the signed-in session.
+			return nil, err
+		}
+		return nil, nil
+	}
+
+	log.Trace("Session Authorization: Logged in user %-v", user)
+	return user, nil
+}

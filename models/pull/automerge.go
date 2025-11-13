@@ -1,0 +1,118 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package pull
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/kumose/kmup/models/db"
+	repo_model "github.com/kumose/kmup/models/repo"
+	user_model "github.com/kumose/kmup/models/user"
+	"github.com/kumose/kmup/modules/timeutil"
+	"github.com/kumose/kmup/modules/util"
+)
+
+// AutoMerge represents a pull request scheduled for merging when checks succeed
+type AutoMerge struct {
+	ID                     int64                 `xorm:"pk autoincr"`
+	PullID                 int64                 `xorm:"UNIQUE"`
+	DoerID                 int64                 `xorm:"INDEX NOT NULL"`
+	Doer                   *user_model.User      `xorm:"-"`
+	MergeStyle             repo_model.MergeStyle `xorm:"varchar(30)"`
+	Message                string                `xorm:"LONGTEXT"`
+	DeleteBranchAfterMerge bool
+	CreatedUnix            timeutil.TimeStamp `xorm:"created"`
+}
+
+// TableName return database table name for xorm
+func (AutoMerge) TableName() string {
+	return "pull_auto_merge"
+}
+
+func init() {
+	db.RegisterModel(new(AutoMerge))
+}
+
+// ErrAlreadyScheduledToAutoMerge represents a "PullRequestHasMerged"-error
+type ErrAlreadyScheduledToAutoMerge struct {
+	PullID int64
+}
+
+func (err ErrAlreadyScheduledToAutoMerge) Error() string {
+	return fmt.Sprintf("pull request is already scheduled to auto merge when checks succeed [pull_id: %d]", err.PullID)
+}
+
+// IsErrAlreadyScheduledToAutoMerge checks if an error is a ErrAlreadyScheduledToAutoMerge.
+func IsErrAlreadyScheduledToAutoMerge(err error) bool {
+	_, ok := err.(ErrAlreadyScheduledToAutoMerge)
+	return ok
+}
+
+// ScheduleAutoMerge schedules a pull request to be merged when all checks succeed
+func ScheduleAutoMerge(ctx context.Context, doer *user_model.User, pullID int64, style repo_model.MergeStyle, message string, deleteBranchAfterMerge bool) error {
+	// Check if we already have a merge scheduled for that pull request
+	if exists, _, err := GetScheduledMergeByPullID(ctx, pullID); err != nil {
+		return err
+	} else if exists {
+		return ErrAlreadyScheduledToAutoMerge{PullID: pullID}
+	}
+
+	_, err := db.GetEngine(ctx).Insert(&AutoMerge{
+		DoerID:                 doer.ID,
+		PullID:                 pullID,
+		MergeStyle:             style,
+		Message:                message,
+		DeleteBranchAfterMerge: deleteBranchAfterMerge,
+	})
+	return err
+}
+
+// GetScheduledMergeByPullID gets a scheduled pull request merge by pull request id
+func GetScheduledMergeByPullID(ctx context.Context, pullID int64) (bool, *AutoMerge, error) {
+	scheduledPRM := &AutoMerge{}
+	exists, err := db.GetEngine(ctx).Where("pull_id = ?", pullID).Get(scheduledPRM)
+	if err != nil || !exists {
+		return false, nil, err
+	}
+
+	doer, err := user_model.GetPossibleUserByID(ctx, scheduledPRM.DoerID)
+	if errors.Is(err, util.ErrNotExist) {
+		doer, err = user_model.NewGhostUser(), nil
+	}
+	if err != nil {
+		return false, nil, err
+	}
+
+	scheduledPRM.Doer = doer
+	return true, scheduledPRM, nil
+}
+
+// DeleteScheduledAutoMerge delete a scheduled pull request
+func DeleteScheduledAutoMerge(ctx context.Context, pullID int64) error {
+	exist, scheduledPRM, err := GetScheduledMergeByPullID(ctx, pullID)
+	if err != nil {
+		return err
+	} else if !exist {
+		return db.ErrNotExist{Resource: "auto_merge", ID: pullID}
+	}
+
+	_, err = db.GetEngine(ctx).ID(scheduledPRM.ID).Delete(&AutoMerge{})
+	return err
+}

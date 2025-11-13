@@ -1,0 +1,89 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package markdown
+
+import (
+	"bytes"
+	"strings"
+
+	"github.com/kumose/kmup/modules/markup"
+
+	"github.com/microcosm-cc/bluemonday/css"
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/renderer/html"
+	"github.com/yuin/goldmark/text"
+	"github.com/yuin/goldmark/util"
+)
+
+// renderCodeSpan renders CodeSpan elements (like goldmark upstream does) but also renders ColorPreview elements.
+// See #21474 for reference
+func (r *HTMLRenderer) renderCodeSpan(w util.BufWriter, source []byte, n ast.Node, entering bool) (ast.WalkStatus, error) {
+	if entering {
+		if n.Attributes() != nil {
+			_, _ = w.WriteString("<code")
+			html.RenderAttributes(w, n, html.CodeAttributeFilter)
+			_ = w.WriteByte('>')
+		} else {
+			_, _ = w.WriteString("<code>")
+		}
+		for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+			switch v := c.(type) {
+			case *ast.Text:
+				segment := v.Segment
+				value := segment.Value(source)
+				if bytes.HasSuffix(value, []byte("\n")) {
+					r.Writer.RawWrite(w, value[:len(value)-1])
+					r.Writer.RawWrite(w, []byte(" "))
+				} else {
+					r.Writer.RawWrite(w, value)
+				}
+			case *ColorPreview:
+				_ = r.renderInternal.FormatWithSafeAttrs(w, `<span class="color-preview" style="background-color: %s"></span>`, string(v.Color))
+			}
+		}
+		return ast.WalkSkipChildren, nil
+	}
+	_, _ = w.WriteString("</code>")
+	return ast.WalkContinue, nil
+}
+
+// cssColorHandler checks if a string is a render-able CSS color value.
+// The code is from "github.com/microcosm-cc/bluemonday/css.ColorHandler", except that it doesn't handle color words like "red".
+func cssColorHandler(value string) bool {
+	value = strings.ToLower(value)
+	if css.HexRGB.MatchString(value) {
+		return true
+	}
+	if css.RGB.MatchString(value) {
+		return true
+	}
+	if css.RGBA.MatchString(value) {
+		return true
+	}
+	if css.HSL.MatchString(value) {
+		return true
+	}
+	return css.HSLA.MatchString(value)
+}
+
+func (g *ASTTransformer) transformCodeSpan(_ *markup.RenderContext, v *ast.CodeSpan, reader text.Reader) {
+	colorContent := v.Text(reader.Source()) //nolint:staticcheck // Text is deprecated
+	if cssColorHandler(string(colorContent)) {
+		v.AppendChild(v, NewColorPreview(colorContent))
+	}
+}

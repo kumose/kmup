@@ -1,0 +1,194 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package admin
+
+import (
+	"net/http"
+
+	repo_model "github.com/kumose/kmup/models/repo"
+	user_model "github.com/kumose/kmup/models/user"
+	"github.com/kumose/kmup/modules/util"
+	"github.com/kumose/kmup/routers/api/v1/utils"
+	"github.com/kumose/kmup/services/context"
+	repo_service "github.com/kumose/kmup/services/repository"
+)
+
+// ListUnadoptedRepositories lists the unadopted repositories that match the provided names
+func ListUnadoptedRepositories(ctx *context.APIContext) {
+	// swagger:operation GET /admin/unadopted admin adminUnadoptedList
+	// ---
+	// summary: List unadopted repositories
+	// produces:
+	// - application/json
+	// parameters:
+	// - name: page
+	//   in: query
+	//   description: page number of results to return (1-based)
+	//   type: integer
+	// - name: limit
+	//   in: query
+	//   description: page size of results
+	//   type: integer
+	// - name: pattern
+	//   in: query
+	//   description: pattern of repositories to search for
+	//   type: string
+	// responses:
+	//   "200":
+	//     "$ref": "#/responses/StringSlice"
+	//   "403":
+	//     "$ref": "#/responses/forbidden"
+
+	listOptions := utils.GetListOptions(ctx)
+	if listOptions.Page == 0 {
+		listOptions.Page = 1
+	}
+	repoNames, count, err := repo_service.ListUnadoptedRepositories(ctx, ctx.FormString("query"), &listOptions)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+
+	ctx.SetTotalCountHeader(int64(count))
+
+	ctx.JSON(http.StatusOK, repoNames)
+}
+
+// AdoptRepository will adopt an unadopted repository
+func AdoptRepository(ctx *context.APIContext) {
+	// swagger:operation POST /admin/unadopted/{owner}/{repo} admin adminAdoptRepository
+	// ---
+	// summary: Adopt unadopted files as a repository
+	// produces:
+	// - application/json
+	// parameters:
+	// - name: owner
+	//   in: path
+	//   description: owner of the repo
+	//   type: string
+	//   required: true
+	// - name: repo
+	//   in: path
+	//   description: name of the repo
+	//   type: string
+	//   required: true
+	// responses:
+	//   "204":
+	//     "$ref": "#/responses/empty"
+	//   "404":
+	//     "$ref": "#/responses/notFound"
+	//   "403":
+	//     "$ref": "#/responses/forbidden"
+	ownerName := ctx.PathParam("username")
+	repoName := ctx.PathParam("reponame")
+
+	ctxUser, err := user_model.GetUserByName(ctx, ownerName)
+	if err != nil {
+		if user_model.IsErrUserNotExist(err) {
+			ctx.APIErrorNotFound()
+			return
+		}
+		ctx.APIErrorInternal(err)
+		return
+	}
+
+	// check not a repo
+	has, err := repo_model.IsRepositoryModelExist(ctx, ctxUser, repoName)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	isDir, err := util.IsDir(repo_model.RepoPath(ctxUser.Name, repoName))
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	if has || !isDir {
+		ctx.APIErrorNotFound()
+		return
+	}
+	if _, err := repo_service.AdoptRepository(ctx, ctx.Doer, ctxUser, repo_service.CreateRepoOptions{
+		Name:      repoName,
+		IsPrivate: true,
+	}); err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+
+	ctx.Status(http.StatusNoContent)
+}
+
+// DeleteUnadoptedRepository will delete an unadopted repository
+func DeleteUnadoptedRepository(ctx *context.APIContext) {
+	// swagger:operation DELETE /admin/unadopted/{owner}/{repo} admin adminDeleteUnadoptedRepository
+	// ---
+	// summary: Delete unadopted files
+	// produces:
+	// - application/json
+	// parameters:
+	// - name: owner
+	//   in: path
+	//   description: owner of the repo
+	//   type: string
+	//   required: true
+	// - name: repo
+	//   in: path
+	//   description: name of the repo
+	//   type: string
+	//   required: true
+	// responses:
+	//   "204":
+	//     "$ref": "#/responses/empty"
+	//   "403":
+	//     "$ref": "#/responses/forbidden"
+	ownerName := ctx.PathParam("username")
+	repoName := ctx.PathParam("reponame")
+
+	ctxUser, err := user_model.GetUserByName(ctx, ownerName)
+	if err != nil {
+		if user_model.IsErrUserNotExist(err) {
+			ctx.APIErrorNotFound()
+			return
+		}
+		ctx.APIErrorInternal(err)
+		return
+	}
+
+	// check not a repo
+	has, err := repo_model.IsRepositoryModelExist(ctx, ctxUser, repoName)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	isDir, err := util.IsDir(repo_model.RepoPath(ctxUser.Name, repoName))
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	if has || !isDir {
+		ctx.APIErrorNotFound()
+		return
+	}
+
+	if err := repo_service.DeleteUnadoptedRepository(ctx, ctx.Doer, ctxUser, repoName); err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+
+	ctx.Status(http.StatusNoContent)
+}

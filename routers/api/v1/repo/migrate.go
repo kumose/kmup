@@ -1,0 +1,293 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package repo
+
+import (
+	gocontext "context"
+	"errors"
+	"fmt"
+	"net/http"
+	"strings"
+
+	"github.com/kumose/kmup/models/db"
+	"github.com/kumose/kmup/models/organization"
+	"github.com/kumose/kmup/models/perm"
+	access_model "github.com/kumose/kmup/models/perm/access"
+	repo_model "github.com/kumose/kmup/models/repo"
+	user_model "github.com/kumose/kmup/models/user"
+	"github.com/kumose/kmup/modules/git"
+	"github.com/kumose/kmup/modules/graceful"
+	"github.com/kumose/kmup/modules/lfs"
+	"github.com/kumose/kmup/modules/log"
+	base "github.com/kumose/kmup/modules/migration"
+	"github.com/kumose/kmup/modules/setting"
+	api "github.com/kumose/kmup/modules/structs"
+	"github.com/kumose/kmup/modules/util"
+	"github.com/kumose/kmup/modules/web"
+	"github.com/kumose/kmup/services/context"
+	"github.com/kumose/kmup/services/convert"
+	"github.com/kumose/kmup/services/migrations"
+	notify_service "github.com/kumose/kmup/services/notify"
+	repo_service "github.com/kumose/kmup/services/repository"
+)
+
+// Migrate migrate remote git repository to kmup
+func Migrate(ctx *context.APIContext) {
+	// swagger:operation POST /repos/migrate repository repoMigrate
+	// ---
+	// summary: Migrate a remote git repository
+	// consumes:
+	// - application/json
+	// produces:
+	// - application/json
+	// parameters:
+	// - name: body
+	//   in: body
+	//   schema:
+	//     "$ref": "#/definitions/MigrateRepoOptions"
+	// responses:
+	//   "201":
+	//     "$ref": "#/responses/Repository"
+	//   "403":
+	//     "$ref": "#/responses/forbidden"
+	//   "409":
+	//     description: The repository with the same name already exists.
+	//   "422":
+	//     "$ref": "#/responses/validationError"
+
+	form := web.GetForm(ctx).(*api.MigrateRepoOptions)
+
+	// get repoOwner
+	var (
+		repoOwner *user_model.User
+		err       error
+	)
+	if len(form.RepoOwner) != 0 {
+		repoOwner, err = user_model.GetUserByName(ctx, form.RepoOwner)
+	} else if form.RepoOwnerID != 0 {
+		repoOwner, err = user_model.GetUserByID(ctx, form.RepoOwnerID)
+	} else {
+		repoOwner = ctx.Doer
+	}
+	if err != nil {
+		if user_model.IsErrUserNotExist(err) {
+			ctx.APIError(http.StatusUnprocessableEntity, err)
+		} else {
+			ctx.APIErrorInternal(err)
+		}
+		return
+	}
+
+	if ctx.HasAPIError() {
+		ctx.APIError(http.StatusUnprocessableEntity, ctx.GetErrMsg())
+		return
+	}
+
+	if !ctx.Doer.IsAdmin {
+		if !repoOwner.IsOrganization() && ctx.Doer.ID != repoOwner.ID {
+			ctx.APIError(http.StatusForbidden, "Given user is not an organization.")
+			return
+		}
+
+		if repoOwner.IsOrganization() {
+			// Check ownership of organization.
+			isOwner, err := organization.OrgFromUser(repoOwner).IsOwnedBy(ctx, ctx.Doer.ID)
+			if err != nil {
+				ctx.APIErrorInternal(err)
+				return
+			} else if !isOwner {
+				ctx.APIError(http.StatusForbidden, "Given user is not owner of organization.")
+				return
+			}
+		}
+	}
+
+	remoteAddr, err := git.ParseRemoteAddr(form.CloneAddr, form.AuthUsername, form.AuthPassword)
+	if err == nil {
+		err = migrations.IsMigrateURLAllowed(remoteAddr, ctx.Doer)
+	}
+	if err != nil {
+		handleRemoteAddrError(ctx, err)
+		return
+	}
+
+	gitServiceType := convert.ToGitServiceType(form.Service)
+
+	if form.Mirror && setting.Mirror.DisableNewPull {
+		ctx.APIError(http.StatusForbidden, errors.New("the site administrator has disabled the creation of new pull mirrors"))
+		return
+	}
+
+	if setting.Repository.DisableMigrations {
+		ctx.APIError(http.StatusForbidden, errors.New("the site administrator has disabled migrations"))
+		return
+	}
+
+	form.LFS = form.LFS && setting.LFS.StartServer
+
+	if form.LFS && len(form.LFSEndpoint) > 0 {
+		ep := lfs.DetermineEndpoint("", form.LFSEndpoint)
+		if ep == nil {
+			ctx.APIErrorInternal(errors.New("the LFS endpoint is not valid"))
+			return
+		}
+		err = migrations.IsMigrateURLAllowed(ep.String(), ctx.Doer)
+		if err != nil {
+			handleRemoteAddrError(ctx, err)
+			return
+		}
+	}
+
+	opts := migrations.MigrateOptions{
+		CloneAddr:      remoteAddr,
+		RepoName:       form.RepoName,
+		Description:    form.Description,
+		Private:        form.Private || setting.Repository.ForcePrivate,
+		Mirror:         form.Mirror,
+		LFS:            form.LFS,
+		LFSEndpoint:    form.LFSEndpoint,
+		AuthUsername:   form.AuthUsername,
+		AuthPassword:   form.AuthPassword,
+		AuthToken:      form.AuthToken,
+		Wiki:           form.Wiki,
+		Issues:         form.Issues,
+		Milestones:     form.Milestones,
+		Labels:         form.Labels,
+		Comments:       form.Issues || form.PullRequests,
+		PullRequests:   form.PullRequests,
+		Releases:       form.Releases,
+		GitServiceType: gitServiceType,
+		MirrorInterval: form.MirrorInterval,
+	}
+	if opts.Mirror {
+		opts.Issues = false
+		opts.Milestones = false
+		opts.Labels = false
+		opts.Comments = false
+		opts.PullRequests = false
+		opts.Releases = false
+	}
+	if gitServiceType == api.CodeCommitService {
+		opts.AWSAccessKeyID = form.AWSAccessKeyID
+		opts.AWSSecretAccessKey = form.AWSSecretAccessKey
+	}
+
+	createdRepo, err := repo_service.CreateRepositoryDirectly(ctx, ctx.Doer, repoOwner, repo_service.CreateRepoOptions{
+		Name:           opts.RepoName,
+		Description:    opts.Description,
+		OriginalURL:    form.CloneAddr,
+		GitServiceType: gitServiceType,
+		IsPrivate:      opts.Private || setting.Repository.ForcePrivate,
+		IsMirror:       opts.Mirror,
+		Status:         repo_model.RepositoryBeingMigrated,
+	}, false)
+	if err != nil {
+		handleMigrateError(ctx, repoOwner, err)
+		return
+	}
+
+	opts.MigrateToRepoID = createdRepo.ID
+
+	doLongTimeMigrate := func(ctx gocontext.Context, doer *user_model.User) (migratedRepo *repo_model.Repository, retErr error) {
+		defer func() {
+			if e := recover(); e != nil {
+				log.Error("MigrateRepository panic: %v\n%s", e, log.Stack(2))
+				if errDelete := repo_service.DeleteRepositoryDirectly(ctx, createdRepo.ID); errDelete != nil {
+					log.Error("Unable to delete repo after MigrateRepository panic: %v", errDelete)
+				}
+				retErr = errors.New("MigrateRepository panic") // no idea why it would happen, just legacy code
+			}
+		}()
+
+		migratedRepo, err := migrations.MigrateRepository(ctx, doer, repoOwner.Name, opts, nil)
+		if err != nil {
+			return nil, err
+		}
+		notify_service.MigrateRepository(ctx, doer, repoOwner, migratedRepo)
+		return migratedRepo, nil
+	}
+
+	// use a background context, don't cancel the migration even if the client goes away
+	// HammerContext doesn't seem right (from https://github.com/go-kmup/kmup/pull/9335/files)
+	// There are other abuses, maybe most HammerContext abuses should be fixed together in the future.
+	migratedRepo, err := doLongTimeMigrate(graceful.GetManager().HammerContext(), ctx.Doer)
+	if err != nil {
+		handleMigrateError(ctx, repoOwner, err)
+		return
+	}
+
+	ctx.JSON(http.StatusCreated, convert.ToRepo(ctx, migratedRepo, access_model.Permission{AccessMode: perm.AccessModeAdmin}))
+}
+
+func handleMigrateError(ctx *context.APIContext, repoOwner *user_model.User, err error) {
+	switch {
+	case repo_model.IsErrRepoAlreadyExist(err):
+		ctx.APIError(http.StatusConflict, "The repository with the same name already exists.")
+	case repo_model.IsErrRepoFilesAlreadyExist(err):
+		ctx.APIError(http.StatusConflict, "Files already exist for this repository. Adopt them or delete them.")
+	case migrations.IsRateLimitError(err):
+		ctx.APIError(http.StatusUnprocessableEntity, "Remote visit addressed rate limitation.")
+	case migrations.IsTwoFactorAuthError(err):
+		ctx.APIError(http.StatusUnprocessableEntity, "Remote visit required two factors authentication.")
+	case repo_model.IsErrReachLimitOfRepo(err):
+		ctx.APIError(http.StatusUnprocessableEntity, fmt.Sprintf("You have already reached your limit of %d repositories.", repoOwner.MaxCreationLimit()))
+	case db.IsErrNameReserved(err):
+		ctx.APIError(http.StatusUnprocessableEntity, fmt.Sprintf("The username '%s' is reserved.", err.(db.ErrNameReserved).Name))
+	case db.IsErrNameCharsNotAllowed(err):
+		ctx.APIError(http.StatusUnprocessableEntity, fmt.Sprintf("The username '%s' contains invalid characters.", err.(db.ErrNameCharsNotAllowed).Name))
+	case db.IsErrNamePatternNotAllowed(err):
+		ctx.APIError(http.StatusUnprocessableEntity, fmt.Sprintf("The pattern '%s' is not allowed in a username.", err.(db.ErrNamePatternNotAllowed).Pattern))
+	case git.IsErrInvalidCloneAddr(err):
+		ctx.APIError(http.StatusUnprocessableEntity, err)
+	case base.IsErrNotSupported(err):
+		ctx.APIError(http.StatusUnprocessableEntity, err)
+	default:
+		err = util.SanitizeErrorCredentialURLs(err)
+		if strings.Contains(err.Error(), "Authentication failed") ||
+			strings.Contains(err.Error(), "Bad credentials") ||
+			strings.Contains(err.Error(), "could not read Username") {
+			ctx.APIError(http.StatusUnprocessableEntity, fmt.Sprintf("Authentication failed: %v.", err))
+		} else if strings.Contains(err.Error(), "fatal:") {
+			ctx.APIError(http.StatusUnprocessableEntity, fmt.Sprintf("Migration failed: %v.", err))
+		} else {
+			ctx.APIErrorInternal(err)
+		}
+	}
+}
+
+func handleRemoteAddrError(ctx *context.APIContext, err error) {
+	if git.IsErrInvalidCloneAddr(err) {
+		addrErr := err.(*git.ErrInvalidCloneAddr)
+		switch {
+		case addrErr.IsURLError:
+			ctx.APIError(http.StatusUnprocessableEntity, err)
+		case addrErr.IsPermissionDenied:
+			if addrErr.LocalPath {
+				ctx.APIError(http.StatusUnprocessableEntity, "You are not allowed to import local repositories.")
+			} else {
+				ctx.APIError(http.StatusUnprocessableEntity, "You can not import from disallowed hosts.")
+			}
+		case addrErr.IsInvalidPath:
+			ctx.APIError(http.StatusUnprocessableEntity, "Invalid local path, it does not exist or not a directory.")
+		default:
+			ctx.APIErrorInternal(fmt.Errorf("unknown error type (ErrInvalidCloneAddr): %w", err))
+		}
+	} else {
+		ctx.APIErrorInternal(err)
+	}
+}

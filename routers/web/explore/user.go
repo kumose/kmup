@@ -1,0 +1,177 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package explore
+
+import (
+	"bytes"
+	"net/http"
+
+	"github.com/kumose/kmup/models/db"
+	user_model "github.com/kumose/kmup/models/user"
+	"github.com/kumose/kmup/modules/container"
+	"github.com/kumose/kmup/modules/log"
+	"github.com/kumose/kmup/modules/optional"
+	"github.com/kumose/kmup/modules/setting"
+	"github.com/kumose/kmup/modules/sitemap"
+	"github.com/kumose/kmup/modules/structs"
+	"github.com/kumose/kmup/modules/templates"
+	"github.com/kumose/kmup/modules/util"
+	"github.com/kumose/kmup/services/context"
+)
+
+const (
+	// tplExploreUsers explore users page template
+	tplExploreUsers templates.TplName = "explore/users"
+)
+
+var nullByte = []byte{0x00}
+
+func isKeywordValid(keyword string) bool {
+	return !bytes.Contains([]byte(keyword), nullByte)
+}
+
+// RenderUserSearch render user search page
+func RenderUserSearch(ctx *context.Context, opts user_model.SearchUserOptions, tplName templates.TplName) {
+	// Sitemap index for sitemap paths
+	opts.Page = ctx.PathParamInt("idx")
+	isSitemap := ctx.PathParam("idx") != ""
+	if opts.Page <= 1 {
+		opts.Page = ctx.FormInt("page")
+	}
+	if opts.Page <= 1 {
+		opts.Page = 1
+	}
+
+	if isSitemap {
+		opts.PageSize = setting.UI.SitemapPagingNum
+	}
+
+	var (
+		users   []*user_model.User
+		count   int64
+		err     error
+		orderBy db.SearchOrderBy
+	)
+
+	// we can not set orderBy to `models.SearchOrderByXxx`, because there may be a JOIN in the statement, different tables may have the same name columns
+
+	sortOrder := ctx.FormString("sort")
+	if sortOrder == "" {
+		sortOrder = setting.UI.ExploreDefaultSort
+	}
+	ctx.Data["SortType"] = sortOrder
+
+	switch sortOrder {
+	case "newest":
+		orderBy = "`user`.id DESC"
+	case "oldest":
+		orderBy = "`user`.id ASC"
+	case "leastupdate":
+		orderBy = "`user`.updated_unix ASC"
+	case "reversealphabetically":
+		orderBy = "`user`.name DESC"
+	case "lastlogin":
+		orderBy = "`user`.last_login_unix ASC"
+	case "reverselastlogin":
+		orderBy = "`user`.last_login_unix DESC"
+	case "alphabetically":
+		orderBy = "`user`.name ASC"
+	case "recentupdate":
+		fallthrough
+	default:
+		// in case the sortType is not valid, we set it to recentupdate
+		sortOrder = "recentupdate"
+		ctx.Data["SortType"] = "recentupdate"
+		orderBy = "`user`.updated_unix DESC"
+	}
+
+	if opts.SupportedSortOrders != nil && !opts.SupportedSortOrders.Contains(sortOrder) {
+		ctx.NotFound(nil)
+		return
+	}
+
+	opts.Keyword = ctx.FormTrim("q")
+	opts.OrderBy = orderBy
+	if len(opts.Keyword) == 0 || isKeywordValid(opts.Keyword) {
+		users, count, err = user_model.SearchUsers(ctx, opts)
+		if err != nil {
+			ctx.ServerError("SearchUsers", err)
+			return
+		}
+	}
+	if isSitemap {
+		m := sitemap.NewSitemap()
+		for _, item := range users {
+			m.Add(sitemap.URL{URL: item.HTMLURL(ctx), LastMod: item.UpdatedUnix.AsTimePtr()})
+		}
+		ctx.Resp.Header().Set("Content-Type", "text/xml")
+		if _, err := m.WriteTo(ctx.Resp); err != nil {
+			log.Error("Failed writing sitemap: %v", err)
+		}
+		return
+	}
+
+	ctx.Data["Keyword"] = opts.Keyword
+	ctx.Data["Total"] = count
+	ctx.Data["Users"] = users
+	ctx.Data["UsersTwoFaStatus"] = user_model.UserList(users).GetTwoFaStatus(ctx)
+	ctx.Data["ShowUserEmail"] = setting.UI.ShowUserEmail
+	ctx.Data["IsRepoIndexerEnabled"] = setting.Indexer.RepoIndexerEnabled
+
+	pager := context.NewPagination(int(count), opts.PageSize, opts.Page, 5)
+	pager.AddParamFromRequest(ctx.Req)
+	ctx.Data["Page"] = pager
+
+	ctx.HTML(http.StatusOK, tplName)
+}
+
+// Users render explore users page
+func Users(ctx *context.Context) {
+	if setting.Service.Explore.DisableUsersPage {
+		ctx.Redirect(setting.AppSubURL + "/explore")
+		return
+	}
+	ctx.Data["OrganizationsPageIsDisabled"] = setting.Service.Explore.DisableOrganizationsPage
+	ctx.Data["CodePageIsDisabled"] = setting.Service.Explore.DisableCodePage
+	ctx.Data["Title"] = ctx.Tr("explore")
+	ctx.Data["PageIsExplore"] = true
+	ctx.Data["PageIsExploreUsers"] = true
+	ctx.Data["IsRepoIndexerEnabled"] = setting.Indexer.RepoIndexerEnabled
+
+	supportedSortOrders := container.SetOf(
+		"newest",
+		"oldest",
+		"alphabetically",
+		"reversealphabetically",
+	)
+	sortOrder := ctx.FormString("sort")
+	if sortOrder == "" {
+		sortOrder = util.Iif(supportedSortOrders.Contains(setting.UI.ExploreDefaultSort), setting.UI.ExploreDefaultSort, "newest")
+		ctx.SetFormString("sort", sortOrder)
+	}
+
+	RenderUserSearch(ctx, user_model.SearchUserOptions{
+		Actor:       ctx.Doer,
+		Types:       []user_model.UserType{user_model.UserTypeIndividual},
+		ListOptions: db.ListOptions{PageSize: setting.UI.ExplorePagingNum},
+		IsActive:    optional.Some(true),
+		Visible:     []structs.VisibleType{structs.VisibleTypePublic, structs.VisibleTypeLimited, structs.VisibleTypePrivate},
+
+		SupportedSortOrders: supportedSortOrders,
+	}, tplExploreUsers)
+}

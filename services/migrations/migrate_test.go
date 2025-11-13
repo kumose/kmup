@@ -1,0 +1,129 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package migrations
+
+import (
+	"net"
+	"path/filepath"
+	"testing"
+
+	"github.com/kumose/kmup/models/unittest"
+	user_model "github.com/kumose/kmup/models/user"
+	"github.com/kumose/kmup/modules/setting"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func TestMigrateWhiteBlocklist(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	adminUser := unittest.AssertExistsAndLoadBean(t, &user_model.User{Name: "user1"})
+	nonAdminUser := unittest.AssertExistsAndLoadBean(t, &user_model.User{Name: "user2"})
+
+	setting.Migrations.AllowedDomains = "github.com"
+	setting.Migrations.AllowLocalNetworks = false
+	assert.NoError(t, Init())
+
+	err := IsMigrateURLAllowed("https://gitlab.com/gitlab/gitlab.git", nonAdminUser)
+	assert.Error(t, err)
+
+	err = IsMigrateURLAllowed("https://github.com/go-kmup/kmup.git", nonAdminUser)
+	assert.NoError(t, err)
+
+	err = IsMigrateURLAllowed("https://gITHUb.com/go-kmup/kmup.git", nonAdminUser)
+	assert.NoError(t, err)
+
+	setting.Migrations.AllowedDomains = ""
+	setting.Migrations.BlockedDomains = "github.com"
+	assert.NoError(t, Init())
+
+	err = IsMigrateURLAllowed("https://gitlab.com/gitlab/gitlab.git", nonAdminUser)
+	assert.NoError(t, err)
+
+	err = IsMigrateURLAllowed("https://github.com/go-kmup/kmup.git", nonAdminUser)
+	assert.Error(t, err)
+
+	err = IsMigrateURLAllowed("https://10.0.0.1/go-kmup/kmup.git", nonAdminUser)
+	assert.Error(t, err)
+
+	setting.Migrations.AllowLocalNetworks = true
+	assert.NoError(t, Init())
+	err = IsMigrateURLAllowed("https://10.0.0.1/go-kmup/kmup.git", nonAdminUser)
+	assert.NoError(t, err)
+
+	old := setting.ImportLocalPaths
+	setting.ImportLocalPaths = false
+
+	err = IsMigrateURLAllowed("/home/foo/bar/goo", adminUser)
+	assert.Error(t, err)
+
+	setting.ImportLocalPaths = true
+	abs, err := filepath.Abs(".")
+	assert.NoError(t, err)
+
+	err = IsMigrateURLAllowed(abs, adminUser)
+	assert.NoError(t, err)
+
+	err = IsMigrateURLAllowed(abs, nonAdminUser)
+	assert.Error(t, err)
+
+	nonAdminUser.AllowImportLocal = true
+	err = IsMigrateURLAllowed(abs, nonAdminUser)
+	assert.NoError(t, err)
+
+	setting.ImportLocalPaths = old
+}
+
+func TestAllowBlockList(t *testing.T) {
+	init := func(allow, block string, local bool) {
+		setting.Migrations.AllowedDomains = allow
+		setting.Migrations.BlockedDomains = block
+		setting.Migrations.AllowLocalNetworks = local
+		assert.NoError(t, Init())
+	}
+
+	// default, allow all external, block none, no local networks
+	init("", "", false)
+	assert.NoError(t, checkByAllowBlockList("domain.com", []net.IP{net.ParseIP("1.2.3.4")}))
+	assert.Error(t, checkByAllowBlockList("domain.com", []net.IP{net.ParseIP("127.0.0.1")}))
+
+	// allow all including local networks (it could lead to SSRF in production)
+	init("", "", true)
+	assert.NoError(t, checkByAllowBlockList("domain.com", []net.IP{net.ParseIP("1.2.3.4")}))
+	assert.NoError(t, checkByAllowBlockList("domain.com", []net.IP{net.ParseIP("127.0.0.1")}))
+
+	// allow wildcard, block some subdomains. if the domain name is allowed, then the local network check is skipped
+	init("*.domain.com", "blocked.domain.com", false)
+	assert.NoError(t, checkByAllowBlockList("sub.domain.com", []net.IP{net.ParseIP("1.2.3.4")}))
+	assert.NoError(t, checkByAllowBlockList("sub.domain.com", []net.IP{net.ParseIP("127.0.0.1")}))
+	assert.Error(t, checkByAllowBlockList("blocked.domain.com", []net.IP{net.ParseIP("1.2.3.4")}))
+	assert.Error(t, checkByAllowBlockList("sub.other.com", []net.IP{net.ParseIP("1.2.3.4")}))
+
+	// allow wildcard (it could lead to SSRF in production)
+	init("*", "", false)
+	assert.NoError(t, checkByAllowBlockList("domain.com", []net.IP{net.ParseIP("1.2.3.4")}))
+	assert.NoError(t, checkByAllowBlockList("domain.com", []net.IP{net.ParseIP("127.0.0.1")}))
+
+	// local network can still be blocked
+	init("*", "127.0.0.*", false)
+	assert.NoError(t, checkByAllowBlockList("domain.com", []net.IP{net.ParseIP("1.2.3.4")}))
+	assert.Error(t, checkByAllowBlockList("domain.com", []net.IP{net.ParseIP("127.0.0.1")}))
+
+	// reset
+	init("", "", false)
+}

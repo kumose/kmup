@@ -1,0 +1,171 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package integration
+
+import (
+	"fmt"
+	"net/http"
+	"testing"
+
+	auth_model "github.com/kumose/kmup/models/auth"
+	"github.com/kumose/kmup/models/unittest"
+	user_model "github.com/kumose/kmup/models/user"
+	"github.com/kumose/kmup/modules/setting"
+	api "github.com/kumose/kmup/modules/structs"
+	"github.com/kumose/kmup/modules/test"
+	"github.com/kumose/kmup/tests"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func TestAPIStar(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	user := "user1"
+	repo := "user2/repo1"
+
+	session := loginUser(t, user)
+	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadUser)
+	tokenWithUserScope := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteUser, auth_model.AccessTokenScopeWriteRepository)
+
+	t.Run("Star", func(t *testing.T) {
+		defer tests.PrintCurrentTest(t)()
+
+		req := NewRequest(t, "PUT", "/api/v1/user/starred/"+repo).
+			AddTokenAuth(tokenWithUserScope)
+		MakeRequest(t, req, http.StatusNoContent)
+
+		// blocked user can't star a repo
+		user34 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 34})
+		req = NewRequest(t, "PUT", "/api/v1/user/starred/"+repo).
+			AddTokenAuth(getUserToken(t, user34.Name, auth_model.AccessTokenScopeWriteRepository))
+		MakeRequest(t, req, http.StatusForbidden)
+	})
+
+	t.Run("GetStarredRepos", func(t *testing.T) {
+		defer tests.PrintCurrentTest(t)()
+
+		req := NewRequest(t, "GET", fmt.Sprintf("/api/v1/users/%s/starred", user)).
+			AddTokenAuth(token)
+		resp := MakeRequest(t, req, http.StatusOK)
+
+		assert.Equal(t, "1", resp.Header().Get("X-Total-Count"))
+
+		var repos []api.Repository
+		DecodeJSON(t, resp, &repos)
+		assert.Len(t, repos, 1)
+		assert.Equal(t, repo, repos[0].FullName)
+	})
+
+	t.Run("GetMyStarredRepos", func(t *testing.T) {
+		defer tests.PrintCurrentTest(t)()
+
+		req := NewRequest(t, "GET", "/api/v1/user/starred").
+			AddTokenAuth(tokenWithUserScope)
+		resp := MakeRequest(t, req, http.StatusOK)
+
+		assert.Equal(t, "1", resp.Header().Get("X-Total-Count"))
+
+		var repos []api.Repository
+		DecodeJSON(t, resp, &repos)
+		assert.Len(t, repos, 1)
+		assert.Equal(t, repo, repos[0].FullName)
+	})
+
+	t.Run("IsStarring", func(t *testing.T) {
+		defer tests.PrintCurrentTest(t)()
+
+		req := NewRequest(t, "GET", "/api/v1/user/starred/"+repo).
+			AddTokenAuth(tokenWithUserScope)
+		MakeRequest(t, req, http.StatusNoContent)
+
+		req = NewRequest(t, "GET", "/api/v1/user/starred/"+repo+"notexisting").
+			AddTokenAuth(tokenWithUserScope)
+		MakeRequest(t, req, http.StatusNotFound)
+	})
+
+	t.Run("Unstar", func(t *testing.T) {
+		defer tests.PrintCurrentTest(t)()
+
+		req := NewRequest(t, "DELETE", "/api/v1/user/starred/"+repo).
+			AddTokenAuth(tokenWithUserScope)
+		MakeRequest(t, req, http.StatusNoContent)
+	})
+}
+
+func TestAPIStarDisabled(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	user := "user1"
+	repo := "user2/repo1"
+
+	session := loginUser(t, user)
+	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadUser)
+	tokenWithUserScope := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteUser, auth_model.AccessTokenScopeWriteRepository)
+
+	defer test.MockVariableValue(&setting.Repository.DisableStars, true)()
+
+	t.Run("Star", func(t *testing.T) {
+		defer tests.PrintCurrentTest(t)()
+
+		req := NewRequest(t, "PUT", "/api/v1/user/starred/"+repo).
+			AddTokenAuth(tokenWithUserScope)
+		MakeRequest(t, req, http.StatusForbidden)
+
+		user34 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 34})
+		req = NewRequest(t, "PUT", "/api/v1/user/starred/"+repo).
+			AddTokenAuth(getUserToken(t, user34.Name, auth_model.AccessTokenScopeWriteRepository))
+		MakeRequest(t, req, http.StatusForbidden)
+	})
+
+	t.Run("GetStarredRepos", func(t *testing.T) {
+		defer tests.PrintCurrentTest(t)()
+
+		req := NewRequest(t, "GET", fmt.Sprintf("/api/v1/users/%s/starred", user)).
+			AddTokenAuth(token)
+		MakeRequest(t, req, http.StatusForbidden)
+	})
+
+	t.Run("GetMyStarredRepos", func(t *testing.T) {
+		defer tests.PrintCurrentTest(t)()
+
+		req := NewRequest(t, "GET", "/api/v1/user/starred").
+			AddTokenAuth(tokenWithUserScope)
+		MakeRequest(t, req, http.StatusForbidden)
+	})
+
+	t.Run("IsStarring", func(t *testing.T) {
+		defer tests.PrintCurrentTest(t)()
+
+		req := NewRequest(t, "GET", "/api/v1/user/starred/"+repo).
+			AddTokenAuth(tokenWithUserScope)
+		MakeRequest(t, req, http.StatusForbidden)
+
+		req = NewRequest(t, "GET", "/api/v1/user/starred/"+repo+"notexisting").
+			AddTokenAuth(tokenWithUserScope)
+		MakeRequest(t, req, http.StatusForbidden)
+	})
+
+	t.Run("Unstar", func(t *testing.T) {
+		defer tests.PrintCurrentTest(t)()
+
+		req := NewRequest(t, "DELETE", "/api/v1/user/starred/"+repo).
+			AddTokenAuth(tokenWithUserScope)
+		MakeRequest(t, req, http.StatusForbidden)
+	})
+}

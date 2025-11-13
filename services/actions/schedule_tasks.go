@@ -1,0 +1,142 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package actions
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	actions_model "github.com/kumose/kmup/models/actions"
+	"github.com/kumose/kmup/models/db"
+	repo_model "github.com/kumose/kmup/models/repo"
+	"github.com/kumose/kmup/models/unit"
+	"github.com/kumose/kmup/modules/log"
+	"github.com/kumose/kmup/modules/timeutil"
+	webhook_module "github.com/kumose/kmup/modules/webhook"
+)
+
+// StartScheduleTasks start the task
+func StartScheduleTasks(ctx context.Context) error {
+	return startTasks(ctx)
+}
+
+// startTasks retrieves specifications in pages, creates a schedule task for each specification,
+// and updates the specification's next run time and previous run time.
+// The function returns an error if there's an issue with finding or updating the specifications.
+func startTasks(ctx context.Context) error {
+	// Set the page size
+	pageSize := 50
+
+	// Retrieve specs in pages until all specs have been retrieved
+	now := time.Now()
+	for page := 1; ; page++ {
+		// Retrieve the specs for the current page
+		specs, _, err := actions_model.FindSpecs(ctx, actions_model.FindSpecOptions{
+			ListOptions: db.ListOptions{
+				Page:     page,
+				PageSize: pageSize,
+			},
+			Next: now.Unix(),
+		})
+		if err != nil {
+			return fmt.Errorf("find specs: %w", err)
+		}
+
+		if err := specs.LoadRepos(ctx); err != nil {
+			return fmt.Errorf("LoadRepos: %w", err)
+		}
+
+		// Loop through each spec and create a schedule task for it
+		for _, row := range specs {
+			if row.Repo.IsArchived {
+				// Skip if the repo is archived
+				continue
+			}
+
+			cfg, err := row.Repo.GetUnit(ctx, unit.TypeActions)
+			if err != nil {
+				if repo_model.IsErrUnitTypeNotExist(err) {
+					// Skip the actions unit of this repo is disabled.
+					continue
+				}
+				return fmt.Errorf("GetUnit: %w", err)
+			}
+			if cfg.ActionsConfig().IsWorkflowDisabled(row.Schedule.WorkflowID) {
+				continue
+			}
+
+			if err := CreateScheduleTask(ctx, row.Schedule); err != nil {
+				log.Error("CreateScheduleTask: %v", err)
+				return err
+			}
+
+			// Parse the spec
+			schedule, err := row.Parse()
+			if err != nil {
+				log.Error("Parse: %v", err)
+				return err
+			}
+
+			// Update the spec's next run time and previous run time
+			row.Prev = row.Next
+			row.Next = timeutil.TimeStamp(schedule.Next(now.Add(1 * time.Minute)).Unix())
+			if err := actions_model.UpdateScheduleSpec(ctx, row, "prev", "next"); err != nil {
+				log.Error("UpdateScheduleSpec: %v", err)
+				return err
+			}
+		}
+
+		// Stop if all specs have been retrieved
+		if len(specs) < pageSize {
+			break
+		}
+	}
+
+	return nil
+}
+
+// CreateScheduleTask creates a scheduled task from a cron action schedule.
+// It creates an action run based on the schedule, inserts it into the database, and creates commit statuses for each job.
+func CreateScheduleTask(ctx context.Context, cron *actions_model.ActionSchedule) error {
+	// Create a new action run based on the schedule
+	run := &actions_model.ActionRun{
+		Title:         cron.Title,
+		RepoID:        cron.RepoID,
+		OwnerID:       cron.OwnerID,
+		WorkflowID:    cron.WorkflowID,
+		TriggerUserID: cron.TriggerUserID,
+		Ref:           cron.Ref,
+		CommitSHA:     cron.CommitSHA,
+		Event:         cron.Event,
+		EventPayload:  cron.EventPayload,
+		TriggerEvent:  string(webhook_module.HookEventSchedule),
+		ScheduleID:    cron.ID,
+		Status:        actions_model.StatusWaiting,
+	}
+
+	// FIXME cron.Content might be outdated if the workflow file has been changed.
+	// Load the latest sha from default branch
+	// Insert the action run and its associated jobs into the database
+	if err := PrepareRunAndInsert(ctx, cron.Content, run, nil); err != nil {
+		return err
+	}
+
+	// Return nil if no errors occurred
+	return nil
+}

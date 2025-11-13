@@ -1,0 +1,199 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package issue
+
+import (
+	"context"
+	"fmt"
+	"slices"
+	"time"
+
+	issues_model "github.com/kumose/kmup/models/issues"
+	org_model "github.com/kumose/kmup/models/organization"
+	repo_model "github.com/kumose/kmup/models/repo"
+	user_model "github.com/kumose/kmup/models/user"
+	"github.com/kumose/kmup/modules/git"
+	"github.com/kumose/kmup/modules/gitrepo"
+	"github.com/kumose/kmup/modules/graceful"
+	"github.com/kumose/kmup/modules/log"
+	"github.com/kumose/kmup/modules/setting"
+)
+
+func getMergeBase(ctx context.Context, repo *repo_model.Repository, gitRepo *git.Repository, pr *issues_model.PullRequest, baseBranch, headBranch string) (string, error) {
+	// Add a temporary remote
+	tmpRemote := fmt.Sprintf("mergebase-%d-%d", pr.ID, time.Now().UnixNano())
+	if err := gitrepo.GitRemoteAdd(ctx, repo, tmpRemote, gitRepo.Path); err != nil {
+		return "", fmt.Errorf("GitRemoteAdd: %w", err)
+	}
+	defer func() {
+		if err := gitrepo.GitRemoteRemove(graceful.GetManager().ShutdownContext(), repo, tmpRemote); err != nil {
+			log.Error("getMergeBase: GitRemoteRemove: %v", err)
+		}
+	}()
+
+	mergeBase, _, err := gitRepo.GetMergeBase(tmpRemote, baseBranch, headBranch)
+	return mergeBase, err
+}
+
+type ReviewRequestNotifier struct {
+	Comment    *issues_model.Comment
+	IsAdd      bool
+	Reviewer   *user_model.User
+	ReviewTeam *org_model.Team
+}
+
+var codeOwnerFiles = []string{"CODEOWNERS", "docs/CODEOWNERS", ".kmup/CODEOWNERS"}
+
+func IsCodeOwnerFile(f string) bool {
+	return slices.Contains(codeOwnerFiles, f)
+}
+
+func PullRequestCodeOwnersReview(ctx context.Context, pr *issues_model.PullRequest) ([]*ReviewRequestNotifier, error) {
+	if err := pr.LoadIssue(ctx); err != nil {
+		return nil, err
+	}
+	issue := pr.Issue
+	if pr.IsWorkInProgress(ctx) {
+		return nil, nil
+	}
+	if err := pr.LoadHeadRepo(ctx); err != nil {
+		return nil, err
+	}
+	if err := pr.LoadBaseRepo(ctx); err != nil {
+		return nil, err
+	}
+	pr.Issue.Repo = pr.BaseRepo
+
+	if pr.BaseRepo.IsFork {
+		return nil, nil
+	}
+
+	repo, err := gitrepo.OpenRepository(ctx, pr.BaseRepo)
+	if err != nil {
+		return nil, err
+	}
+	defer repo.Close()
+
+	commit, err := repo.GetBranchCommit(pr.BaseRepo.DefaultBranch)
+	if err != nil {
+		return nil, err
+	}
+
+	var data string
+	for _, file := range codeOwnerFiles {
+		if blob, err := commit.GetBlobByPath(file); err == nil {
+			data, err = blob.GetBlobContent(setting.UI.MaxDisplayFileSize)
+			if err == nil {
+				break
+			}
+		}
+	}
+	if data == "" {
+		return nil, nil
+	}
+
+	rules, _ := issues_model.GetCodeOwnersFromContent(ctx, data)
+	if len(rules) == 0 {
+		return nil, nil
+	}
+
+	// get the mergebase
+	mergeBase, err := getMergeBase(ctx, pr.BaseRepo, repo, pr, git.BranchPrefix+pr.BaseBranch, pr.GetGitHeadRefName())
+	if err != nil {
+		return nil, err
+	}
+
+	// https://github.com/go-kmup/kmup/issues/29763, we need to get the files changed
+	// between the merge base and the head commit but not the base branch and the head commit
+	changedFiles, err := repo.GetFilesChangedBetween(mergeBase, pr.GetGitHeadRefName())
+	if err != nil {
+		return nil, err
+	}
+
+	uniqUsers := make(map[int64]*user_model.User)
+	uniqTeams := make(map[string]*org_model.Team)
+	for _, rule := range rules {
+		for _, f := range changedFiles {
+			if (rule.Rule.MatchString(f) && !rule.Negative) || (!rule.Rule.MatchString(f) && rule.Negative) {
+				for _, u := range rule.Users {
+					uniqUsers[u.ID] = u
+				}
+				for _, t := range rule.Teams {
+					uniqTeams[fmt.Sprintf("%d/%d", t.OrgID, t.ID)] = t
+				}
+			}
+		}
+	}
+
+	notifiers := make([]*ReviewRequestNotifier, 0, len(uniqUsers)+len(uniqTeams))
+
+	if err := issue.LoadPoster(ctx); err != nil {
+		return nil, err
+	}
+
+	// load all reviews from database
+	latestReivews, _, err := issues_model.GetReviewsByIssueID(ctx, pr.IssueID)
+	if err != nil {
+		return nil, err
+	}
+
+	contain := func(list issues_model.ReviewList, u *user_model.User) bool {
+		for _, review := range list {
+			if review.ReviewerTeamID == 0 && review.ReviewerID == u.ID {
+				return true
+			}
+		}
+		return false
+	}
+
+	for _, u := range uniqUsers {
+		if u.ID != issue.Poster.ID && !contain(latestReivews, u) {
+			comment, err := issues_model.AddReviewRequest(ctx, issue, u, issue.Poster)
+			if err != nil {
+				log.Warn("Failed add assignee user: %s to PR review: %s#%d, error: %s", u.Name, pr.BaseRepo.Name, pr.ID, err)
+				return nil, err
+			}
+			if comment == nil { // comment maybe nil if review type is ReviewTypeRequest
+				continue
+			}
+			notifiers = append(notifiers, &ReviewRequestNotifier{
+				Comment:  comment,
+				IsAdd:    true,
+				Reviewer: u,
+			})
+		}
+	}
+
+	for _, t := range uniqTeams {
+		comment, err := issues_model.AddTeamReviewRequest(ctx, issue, t, issue.Poster)
+		if err != nil {
+			log.Warn("Failed add assignee team: %s to PR review: %s#%d, error: %s", t.Name, pr.BaseRepo.Name, pr.ID, err)
+			return nil, err
+		}
+		if comment == nil { // comment maybe nil if review type is ReviewTypeRequest
+			continue
+		}
+		notifiers = append(notifiers, &ReviewRequestNotifier{
+			Comment:    comment,
+			IsAdd:      true,
+			ReviewTeam: t,
+		})
+	}
+
+	return notifiers, nil
+}

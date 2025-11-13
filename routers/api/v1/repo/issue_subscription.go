@@ -1,0 +1,308 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package repo
+
+import (
+	"fmt"
+	"net/http"
+
+	issues_model "github.com/kumose/kmup/models/issues"
+	user_model "github.com/kumose/kmup/models/user"
+	api "github.com/kumose/kmup/modules/structs"
+	"github.com/kumose/kmup/routers/api/v1/utils"
+	"github.com/kumose/kmup/services/context"
+	"github.com/kumose/kmup/services/convert"
+)
+
+// AddIssueSubscription Subscribe user to issue
+func AddIssueSubscription(ctx *context.APIContext) {
+	// swagger:operation PUT /repos/{owner}/{repo}/issues/{index}/subscriptions/{user} issue issueAddSubscription
+	// ---
+	// summary: Subscribe user to issue
+	// consumes:
+	// - application/json
+	// produces:
+	// - application/json
+	// parameters:
+	// - name: owner
+	//   in: path
+	//   description: owner of the repo
+	//   type: string
+	//   required: true
+	// - name: repo
+	//   in: path
+	//   description: name of the repo
+	//   type: string
+	//   required: true
+	// - name: index
+	//   in: path
+	//   description: index of the issue
+	//   type: integer
+	//   format: int64
+	//   required: true
+	// - name: user
+	//   in: path
+	//   description: username of the user to subscribe the issue to
+	//   type: string
+	//   required: true
+	// responses:
+	//   "200":
+	//     description: Already subscribed
+	//   "201":
+	//     description: Successfully Subscribed
+	//   "304":
+	//     description: User can only subscribe itself if he is no admin
+	//   "404":
+	//     "$ref": "#/responses/notFound"
+
+	setIssueSubscription(ctx, true)
+}
+
+// DelIssueSubscription Unsubscribe user from issue
+func DelIssueSubscription(ctx *context.APIContext) {
+	// swagger:operation DELETE /repos/{owner}/{repo}/issues/{index}/subscriptions/{user} issue issueDeleteSubscription
+	// ---
+	// summary: Unsubscribe user from issue
+	// consumes:
+	// - application/json
+	// produces:
+	// - application/json
+	// parameters:
+	// - name: owner
+	//   in: path
+	//   description: owner of the repo
+	//   type: string
+	//   required: true
+	// - name: repo
+	//   in: path
+	//   description: name of the repo
+	//   type: string
+	//   required: true
+	// - name: index
+	//   in: path
+	//   description: index of the issue
+	//   type: integer
+	//   format: int64
+	//   required: true
+	// - name: user
+	//   in: path
+	//   description: username of the user to unsubscribe from an issue
+	//   type: string
+	//   required: true
+	// responses:
+	//   "200":
+	//     description: Already unsubscribed
+	//   "201":
+	//     description: Successfully Unsubscribed
+	//   "304":
+	//     description: User can only subscribe itself if he is no admin
+	//   "404":
+	//     "$ref": "#/responses/notFound"
+
+	setIssueSubscription(ctx, false)
+}
+
+func setIssueSubscription(ctx *context.APIContext, watch bool) {
+	issue, err := issues_model.GetIssueByIndex(ctx, ctx.Repo.Repository.ID, ctx.PathParamInt64("index"))
+	if err != nil {
+		if issues_model.IsErrIssueNotExist(err) {
+			ctx.APIErrorNotFound()
+		} else {
+			ctx.APIErrorInternal(err)
+		}
+
+		return
+	}
+
+	user, err := user_model.GetUserByName(ctx, ctx.PathParam("user"))
+	if err != nil {
+		if user_model.IsErrUserNotExist(err) {
+			ctx.APIErrorNotFound()
+		} else {
+			ctx.APIErrorInternal(err)
+		}
+
+		return
+	}
+
+	// only admin and user for itself can change subscription
+	if user.ID != ctx.Doer.ID && !ctx.Doer.IsAdmin {
+		ctx.APIError(http.StatusForbidden, fmt.Errorf("%s is not permitted to change subscriptions for %s", ctx.Doer.Name, user.Name))
+		return
+	}
+
+	current, err := issues_model.CheckIssueWatch(ctx, user, issue)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+
+	// If watch state wont change
+	if current == watch {
+		ctx.Status(http.StatusOK)
+		return
+	}
+
+	// Update watch state
+	if err := issues_model.CreateOrUpdateIssueWatch(ctx, user.ID, issue.ID, watch); err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+
+	ctx.Status(http.StatusCreated)
+}
+
+// CheckIssueSubscription check if user is subscribed to an issue
+func CheckIssueSubscription(ctx *context.APIContext) {
+	// swagger:operation GET /repos/{owner}/{repo}/issues/{index}/subscriptions/check issue issueCheckSubscription
+	// ---
+	// summary: Check if user is subscribed to an issue
+	// consumes:
+	// - application/json
+	// produces:
+	// - application/json
+	// parameters:
+	// - name: owner
+	//   in: path
+	//   description: owner of the repo
+	//   type: string
+	//   required: true
+	// - name: repo
+	//   in: path
+	//   description: name of the repo
+	//   type: string
+	//   required: true
+	// - name: index
+	//   in: path
+	//   description: index of the issue
+	//   type: integer
+	//   format: int64
+	//   required: true
+	// responses:
+	//   "200":
+	//     "$ref": "#/responses/WatchInfo"
+	//   "404":
+	//     "$ref": "#/responses/notFound"
+
+	issue, err := issues_model.GetIssueByIndex(ctx, ctx.Repo.Repository.ID, ctx.PathParamInt64("index"))
+	if err != nil {
+		if issues_model.IsErrIssueNotExist(err) {
+			ctx.APIErrorNotFound()
+		} else {
+			ctx.APIErrorInternal(err)
+		}
+
+		return
+	}
+
+	watching, err := issues_model.CheckIssueWatch(ctx, ctx.Doer, issue)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	ctx.JSON(http.StatusOK, api.WatchInfo{
+		Subscribed:    watching,
+		Ignored:       !watching,
+		Reason:        nil,
+		CreatedAt:     issue.CreatedUnix.AsTime(),
+		URL:           issue.APIURL(ctx) + "/subscriptions",
+		RepositoryURL: ctx.Repo.Repository.APIURL(),
+	})
+}
+
+// GetIssueSubscribers return subscribers of an issue
+func GetIssueSubscribers(ctx *context.APIContext) {
+	// swagger:operation GET /repos/{owner}/{repo}/issues/{index}/subscriptions issue issueSubscriptions
+	// ---
+	// summary: Get users who subscribed on an issue.
+	// consumes:
+	// - application/json
+	// produces:
+	// - application/json
+	// parameters:
+	// - name: owner
+	//   in: path
+	//   description: owner of the repo
+	//   type: string
+	//   required: true
+	// - name: repo
+	//   in: path
+	//   description: name of the repo
+	//   type: string
+	//   required: true
+	// - name: index
+	//   in: path
+	//   description: index of the issue
+	//   type: integer
+	//   format: int64
+	//   required: true
+	// - name: page
+	//   in: query
+	//   description: page number of results to return (1-based)
+	//   type: integer
+	// - name: limit
+	//   in: query
+	//   description: page size of results
+	//   type: integer
+	// responses:
+	//   "200":
+	//     "$ref": "#/responses/UserList"
+	//   "404":
+	//     "$ref": "#/responses/notFound"
+
+	issue, err := issues_model.GetIssueByIndex(ctx, ctx.Repo.Repository.ID, ctx.PathParamInt64("index"))
+	if err != nil {
+		if issues_model.IsErrIssueNotExist(err) {
+			ctx.APIErrorNotFound()
+		} else {
+			ctx.APIErrorInternal(err)
+		}
+
+		return
+	}
+
+	iwl, err := issues_model.GetIssueWatchers(ctx, issue.ID, utils.GetListOptions(ctx))
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+
+	userIDs := make([]int64, 0, len(iwl))
+	for _, iw := range iwl {
+		userIDs = append(userIDs, iw.UserID)
+	}
+
+	users, err := user_model.GetUsersByIDs(ctx, userIDs)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	apiUsers := make([]*api.User, 0, len(users))
+	for _, v := range users {
+		apiUsers = append(apiUsers, convert.ToUser(ctx, v, ctx.Doer))
+	}
+
+	count, err := issues_model.CountIssueWatchers(ctx, issue.ID)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+
+	ctx.SetTotalCountHeader(count)
+	ctx.JSON(http.StatusOK, apiUsers)
+}

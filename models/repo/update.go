@@ -1,0 +1,160 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package repo
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/kumose/kmup/models/db"
+	user_model "github.com/kumose/kmup/models/user"
+	"github.com/kumose/kmup/modules/log"
+	"github.com/kumose/kmup/modules/util"
+)
+
+// UpdateRepositoryOwnerNames updates repository owner_names (this should only be used when the ownerName has changed case)
+func UpdateRepositoryOwnerNames(ctx context.Context, ownerID int64, ownerName string) error {
+	if ownerID == 0 {
+		return nil
+	}
+
+	if _, err := db.GetEngine(ctx).Where("owner_id = ?", ownerID).Cols("owner_name").NoAutoTime().Update(&Repository{
+		OwnerName: ownerName,
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// UpdateRepositoryUpdatedTime updates a repository's updated time
+func UpdateRepositoryUpdatedTime(ctx context.Context, repoID int64, updateTime time.Time) error {
+	_, err := db.GetEngine(ctx).Exec("UPDATE repository SET updated_unix = ? WHERE id = ?", updateTime.Unix(), repoID)
+	return err
+}
+
+// UpdateRepositoryColsWithAutoTime updates repository's columns and the timestamp fields automatically
+func UpdateRepositoryColsWithAutoTime(ctx context.Context, repo *Repository, colName string, moreColNames ...string) error {
+	_, err := db.GetEngine(ctx).ID(repo.ID).Cols(append([]string{colName}, moreColNames...)...).Update(repo)
+	return err
+}
+
+// UpdateRepositoryColsNoAutoTime updates repository's columns, doesn't change timestamp field automatically
+func UpdateRepositoryColsNoAutoTime(ctx context.Context, repo *Repository, colName string, moreColNames ...string) error {
+	_, err := db.GetEngine(ctx).ID(repo.ID).Cols(append([]string{colName}, moreColNames...)...).NoAutoTime().Update(repo)
+	return err
+}
+
+// ErrReachLimitOfRepo represents a "ReachLimitOfRepo" kind of error.
+type ErrReachLimitOfRepo struct {
+	Limit int
+}
+
+// IsErrReachLimitOfRepo checks if an error is a ErrReachLimitOfRepo.
+func IsErrReachLimitOfRepo(err error) bool {
+	_, ok := err.(ErrReachLimitOfRepo)
+	return ok
+}
+
+func (err ErrReachLimitOfRepo) Error() string {
+	return fmt.Sprintf("user has reached maximum limit of repositories [limit: %d]", err.Limit)
+}
+
+func (err ErrReachLimitOfRepo) Unwrap() error {
+	return util.ErrPermissionDenied
+}
+
+// ErrRepoAlreadyExist represents a "RepoAlreadyExist" kind of error.
+type ErrRepoAlreadyExist struct {
+	Uname string
+	Name  string
+}
+
+// IsErrRepoAlreadyExist checks if an error is a ErrRepoAlreadyExist.
+func IsErrRepoAlreadyExist(err error) bool {
+	_, ok := err.(ErrRepoAlreadyExist)
+	return ok
+}
+
+func (err ErrRepoAlreadyExist) Error() string {
+	return fmt.Sprintf("repository already exists [uname: %s, name: %s]", err.Uname, err.Name)
+}
+
+func (err ErrRepoAlreadyExist) Unwrap() error {
+	return util.ErrAlreadyExist
+}
+
+// ErrRepoFilesAlreadyExist represents a "RepoFilesAlreadyExist" kind of error.
+type ErrRepoFilesAlreadyExist struct {
+	Uname string
+	Name  string
+}
+
+// IsErrRepoFilesAlreadyExist checks if an error is a ErrRepoAlreadyExist.
+func IsErrRepoFilesAlreadyExist(err error) bool {
+	_, ok := err.(ErrRepoFilesAlreadyExist)
+	return ok
+}
+
+func (err ErrRepoFilesAlreadyExist) Error() string {
+	return fmt.Sprintf("repository files already exist [uname: %s, name: %s]", err.Uname, err.Name)
+}
+
+func (err ErrRepoFilesAlreadyExist) Unwrap() error {
+	return util.ErrAlreadyExist
+}
+
+// CheckCreateRepository check if doer could create a repository in new owner
+func CheckCreateRepository(ctx context.Context, doer, owner *user_model.User, name string, overwriteOrAdopt bool) error {
+	if !doer.CanCreateRepoIn(owner) {
+		return ErrReachLimitOfRepo{owner.MaxRepoCreation}
+	}
+
+	if err := IsUsableRepoName(name); err != nil {
+		return err
+	}
+
+	has, err := IsRepositoryModelOrDirExist(ctx, owner, name)
+	if err != nil {
+		return fmt.Errorf("IsRepositoryExist: %w", err)
+	} else if has {
+		return ErrRepoAlreadyExist{owner.Name, name}
+	}
+
+	repoPath := RepoPath(owner.Name, name)
+	isExist, err := util.IsExist(repoPath)
+	if err != nil {
+		log.Error("Unable to check if %s exists. Error: %v", repoPath, err)
+		return err
+	}
+	if !overwriteOrAdopt && isExist {
+		return ErrRepoFilesAlreadyExist{owner.Name, name}
+	}
+	return nil
+}
+
+// UpdateRepoSize updates the repository size, calculating it using getDirectorySize
+func UpdateRepoSize(ctx context.Context, repoID, gitSize, lfsSize int64) error {
+	_, err := db.GetEngine(ctx).ID(repoID).Cols("size", "git_size", "lfs_size").NoAutoTime().Update(&Repository{
+		Size:    gitSize + lfsSize,
+		GitSize: gitSize,
+		LFSSize: lfsSize,
+	})
+	return err
+}

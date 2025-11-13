@@ -1,0 +1,130 @@
+// Copyright 2015 The Gogs Authors. All rights reserved.
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package git
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+
+	"github.com/kumose/kmup/modules/util"
+)
+
+// hookNames is a list of Git server hooks' name that are supported.
+var hookNames = []string{
+	"pre-receive",
+	"update",
+	"post-receive",
+}
+
+// ErrNotValidHook error when a git hook is not valid
+var ErrNotValidHook = errors.New("not a valid Git hook")
+
+// IsValidHookName returns true if given name is a valid Git hook.
+func IsValidHookName(name string) bool {
+	return slices.Contains(hookNames, name)
+}
+
+// Hook represents a Git hook.
+type Hook struct {
+	name     string
+	IsActive bool   // Indicates whether repository has this hook.
+	Content  string // Content of hook if it's active.
+	Sample   string // Sample content from Git.
+	path     string // Hook file path.
+}
+
+// GetHook returns a Git hook by given name and repository.
+func GetHook(repoPath, name string) (*Hook, error) {
+	if !IsValidHookName(name) {
+		return nil, ErrNotValidHook
+	}
+	h := &Hook{
+		name: name,
+		path: filepath.Join(repoPath, filepath.Join("hooks", name+".d", name)),
+	}
+	if data, err := os.ReadFile(h.path); err == nil {
+		h.IsActive = true
+		h.Content = string(data)
+		return h, nil
+	} else if !os.IsNotExist(err) {
+		return nil, err
+	}
+
+	samplePath := filepath.Join(repoPath, "hooks", name+".sample")
+	if data, err := os.ReadFile(samplePath); err == nil {
+		h.Sample = string(data)
+	}
+	return h, nil
+}
+
+// Name return the name of the hook
+func (h *Hook) Name() string {
+	return h.name
+}
+
+// Update updates hook settings.
+func (h *Hook) Update() error {
+	if len(strings.TrimSpace(h.Content)) == 0 {
+		exist, err := util.IsExist(h.path)
+		if err != nil {
+			return err
+		}
+		if exist {
+			err := util.Remove(h.path)
+			if err != nil {
+				return err
+			}
+		}
+		h.IsActive = false
+		return nil
+	}
+	d := filepath.Dir(h.path)
+	if err := os.MkdirAll(d, os.ModePerm); err != nil {
+		return err
+	}
+
+	err := os.WriteFile(h.path, []byte(strings.ReplaceAll(h.Content, "\r", "")), os.ModePerm)
+	if err != nil {
+		return err
+	}
+	h.IsActive = true
+	return nil
+}
+
+// ListHooks returns a list of Git hooks of given repository.
+func ListHooks(repoPath string) (_ []*Hook, err error) {
+	exist, err := util.IsDir(filepath.Join(repoPath, "hooks"))
+	if err != nil {
+		return nil, err
+	} else if !exist {
+		return nil, errors.New("hooks path does not exist")
+	}
+
+	hooks := make([]*Hook, len(hookNames))
+	for i, name := range hookNames {
+		hooks[i], err = GetHook(repoPath, name)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return hooks, nil
+}

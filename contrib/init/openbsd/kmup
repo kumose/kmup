@@ -1,0 +1,19 @@
+#!/bin/sh
+#
+# $OpenBSD$
+
+daemon="/usr/local/bin/kmup"
+daemon_user="git"
+daemon_flags="web -c /etc/kmup/app.ini"
+
+kmup_directory="/var/lib/kmup"
+
+rc_bg=YES
+
+. /etc/rc.d/rc.subr
+
+rc_start() {
+	${rcexec} "cd ${kmup_directory}; ${daemon} ${daemon_flags} ${_bg}"
+}
+
+rc_cmd $1

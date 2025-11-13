@@ -1,0 +1,169 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package setting
+
+import (
+	"net/http"
+	"slices"
+	"strconv"
+
+	"github.com/kumose/kmup/models/perm"
+	"github.com/kumose/kmup/models/repo"
+	"github.com/kumose/kmup/models/unit"
+	"github.com/kumose/kmup/modules/setting"
+	"github.com/kumose/kmup/modules/templates"
+	"github.com/kumose/kmup/services/context"
+)
+
+const tplRepoSettingsPublicAccess templates.TplName = "repo/settings/public_access"
+
+func parsePublicAccessMode(permission string, allowed []string) (ret struct {
+	AnonymousAccessMode, EveryoneAccessMode perm.AccessMode
+},
+) {
+	ret.AnonymousAccessMode = perm.AccessModeNone
+	ret.EveryoneAccessMode = perm.AccessModeNone
+
+	// if site admin forces repositories to be private, then do not allow any other access mode,
+	// otherwise the "force private" setting would be bypassed
+	if setting.Repository.ForcePrivate {
+		return ret
+	}
+	if !slices.Contains(allowed, permission) {
+		return ret
+	}
+	switch permission {
+	case paAnonymousRead:
+		ret.AnonymousAccessMode = perm.AccessModeRead
+	case paEveryoneRead:
+		ret.EveryoneAccessMode = perm.AccessModeRead
+	case paEveryoneWrite:
+		ret.EveryoneAccessMode = perm.AccessModeWrite
+	}
+	return ret
+}
+
+const (
+	paNotSet        = "not-set"
+	paAnonymousRead = "anonymous-read"
+	paEveryoneRead  = "everyone-read"
+	paEveryoneWrite = "everyone-write"
+)
+
+type repoUnitPublicAccess struct {
+	UnitType          unit.Type
+	FormKey           string
+	DisplayName       string
+	PublicAccessTypes []string
+	UnitPublicAccess  string
+}
+
+func repoUnitPublicAccesses(ctx *context.Context) []*repoUnitPublicAccess {
+	accesses := []*repoUnitPublicAccess{
+		{
+			UnitType:          unit.TypeCode,
+			DisplayName:       ctx.Locale.TrString("repo.code"),
+			PublicAccessTypes: []string{paAnonymousRead, paEveryoneRead},
+		},
+		{
+			UnitType:          unit.TypeIssues,
+			DisplayName:       ctx.Locale.TrString("issues"),
+			PublicAccessTypes: []string{paAnonymousRead, paEveryoneRead},
+		},
+		{
+			UnitType:          unit.TypePullRequests,
+			DisplayName:       ctx.Locale.TrString("pull_requests"),
+			PublicAccessTypes: []string{paAnonymousRead, paEveryoneRead},
+		},
+		{
+			UnitType:          unit.TypeReleases,
+			DisplayName:       ctx.Locale.TrString("repo.releases"),
+			PublicAccessTypes: []string{paAnonymousRead, paEveryoneRead},
+		},
+		{
+			UnitType:          unit.TypeWiki,
+			DisplayName:       ctx.Locale.TrString("repo.wiki"),
+			PublicAccessTypes: []string{paAnonymousRead, paEveryoneRead, paEveryoneWrite},
+		},
+		{
+			UnitType:          unit.TypeProjects,
+			DisplayName:       ctx.Locale.TrString("repo.projects"),
+			PublicAccessTypes: []string{paAnonymousRead, paEveryoneRead},
+		},
+		{
+			UnitType:          unit.TypePackages,
+			DisplayName:       ctx.Locale.TrString("repo.packages"),
+			PublicAccessTypes: []string{paAnonymousRead, paEveryoneRead},
+		},
+		{
+			UnitType:          unit.TypeActions,
+			DisplayName:       ctx.Locale.TrString("repo.actions"),
+			PublicAccessTypes: []string{paAnonymousRead, paEveryoneRead},
+		},
+	}
+	for _, ua := range accesses {
+		ua.FormKey = "repo-unit-access-" + strconv.Itoa(int(ua.UnitType))
+		for _, u := range ctx.Repo.Repository.Units {
+			if u.Type == ua.UnitType {
+				ua.UnitPublicAccess = paNotSet
+				switch {
+				case u.EveryoneAccessMode == perm.AccessModeWrite:
+					ua.UnitPublicAccess = paEveryoneWrite
+				case u.EveryoneAccessMode == perm.AccessModeRead:
+					ua.UnitPublicAccess = paEveryoneRead
+				case u.AnonymousAccessMode == perm.AccessModeRead:
+					ua.UnitPublicAccess = paAnonymousRead
+				}
+				break
+			}
+		}
+	}
+	return slices.DeleteFunc(accesses, func(ua *repoUnitPublicAccess) bool {
+		return ua.UnitPublicAccess == ""
+	})
+}
+
+func PublicAccess(ctx *context.Context) {
+	ctx.Data["PageIsSettingsPublicAccess"] = true
+	ctx.Data["RepoUnitPublicAccesses"] = repoUnitPublicAccesses(ctx)
+	ctx.Data["GlobalForcePrivate"] = setting.Repository.ForcePrivate
+	if setting.Repository.ForcePrivate {
+		ctx.Flash.Error(ctx.Tr("form.repository_force_private"), true)
+	}
+	ctx.HTML(http.StatusOK, tplRepoSettingsPublicAccess)
+}
+
+func PublicAccessPost(ctx *context.Context) {
+	accesses := repoUnitPublicAccesses(ctx)
+	for _, ua := range accesses {
+		formVal := ctx.FormString(ua.FormKey)
+		parsed := parsePublicAccessMode(formVal, ua.PublicAccessTypes)
+		err := repo.UpdateRepoUnitPublicAccess(ctx, &repo.RepoUnit{
+			RepoID:              ctx.Repo.Repository.ID,
+			Type:                ua.UnitType,
+			AnonymousAccessMode: parsed.AnonymousAccessMode,
+			EveryoneAccessMode:  parsed.EveryoneAccessMode,
+		})
+		if err != nil {
+			ctx.ServerError("UpdateRepoUnitPublicAccess", err)
+			return
+		}
+	}
+	ctx.Flash.Success(ctx.Tr("repo.settings.update_settings_success"))
+	ctx.Redirect(ctx.Repo.Repository.Link() + "/settings/public_access")
+}

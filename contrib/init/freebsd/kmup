@@ -1,0 +1,48 @@
+#!/bin/sh
+#
+# $FreeBSD$
+#
+# PROVIDE: kmup
+# REQUIRE: NETWORKING SYSLOG
+# KEYWORD: shutdown
+#
+# Add the following lines to /etc/rc.conf to enable kmup:
+#
+#kmup_enable="YES"
+
+. /etc/rc.subr
+
+name="kmup"
+rcvar="kmup_enable"
+
+load_rc_config $name
+
+: ${kmup_user:="git"}
+: ${kmup_enable:="NO"}
+: ${kmup_directory:="/var/lib/kmup"}
+
+command="/usr/local/bin/kmup web -c /etc/kmup/app.ini"
+procname="$(echo $command |cut -d' ' -f1)"
+
+pidfile="${kmup_directory}/${name}.pid"
+
+start_cmd="${name}_start"
+stop_cmd="${name}_stop"
+
+kmup_start() {
+	cd ${kmup_directory}
+	export USER=${kmup_user}
+	export HOME=/usr/home/${kmup_user}
+	export KMUP_WORK_DIR=${kmup_directory}
+	/usr/sbin/daemon -f -u ${kmup_user} -p ${pidfile} $command
+}
+
+kmup_stop() {
+	if [ ! -f $pidfile ]; then
+		echo "KMUP PID File not found. Maybe KMUP is not running?"
+	else
+		kill $(cat $pidfile)
+	fi
+}
+
+run_rc_command "$1"

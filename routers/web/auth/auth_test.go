@@ -1,0 +1,109 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package auth
+
+import (
+	"net/http"
+	"net/url"
+	"testing"
+
+	auth_model "github.com/kumose/kmup/models/auth"
+	"github.com/kumose/kmup/modules/session"
+	"github.com/kumose/kmup/modules/setting"
+	"github.com/kumose/kmup/modules/test"
+	"github.com/kumose/kmup/modules/util"
+	"github.com/kumose/kmup/services/auth/source/oauth2"
+	"github.com/kumose/kmup/services/contexttest"
+
+	"github.com/markbates/goth"
+	"github.com/markbates/goth/gothic"
+	"github.com/stretchr/testify/assert"
+)
+
+func addOAuth2Source(t *testing.T, authName string, cfg oauth2.Source) {
+	cfg.Provider = util.IfZero(cfg.Provider, "kmup")
+	err := auth_model.CreateSource(t.Context(), &auth_model.Source{
+		Type:     auth_model.OAuth2,
+		Name:     authName,
+		IsActive: true,
+		Cfg:      &cfg,
+	})
+	assert.NoError(t, err)
+}
+
+func TestUserLogin(t *testing.T) {
+	ctx, resp := contexttest.MockContext(t, "/user/login")
+	SignIn(ctx)
+	assert.Equal(t, http.StatusOK, resp.Code)
+
+	ctx, resp = contexttest.MockContext(t, "/user/login")
+	ctx.IsSigned = true
+	SignIn(ctx)
+	assert.Equal(t, http.StatusSeeOther, resp.Code)
+	assert.Equal(t, "/", test.RedirectURL(resp))
+
+	ctx, resp = contexttest.MockContext(t, "/user/login?redirect_to=/other")
+	ctx.IsSigned = true
+	SignIn(ctx)
+	assert.Equal(t, "/other", test.RedirectURL(resp))
+
+	ctx, resp = contexttest.MockContext(t, "/user/login")
+	ctx.Req.AddCookie(&http.Cookie{Name: "redirect_to", Value: "/other-cookie"})
+	ctx.IsSigned = true
+	SignIn(ctx)
+	assert.Equal(t, "/other-cookie", test.RedirectURL(resp))
+
+	ctx, resp = contexttest.MockContext(t, "/user/login?redirect_to="+url.QueryEscape("https://example.com"))
+	ctx.IsSigned = true
+	SignIn(ctx)
+	assert.Equal(t, "/", test.RedirectURL(resp))
+}
+
+func TestSignUpOAuth2Login(t *testing.T) {
+	defer test.MockVariableValue(&setting.OAuth2Client.EnableAutoRegistration, true)()
+
+	_ = oauth2.Init(t.Context())
+	addOAuth2Source(t, "dummy-auth-source", oauth2.Source{})
+
+	t.Run("OAuth2MissingField", func(t *testing.T) {
+		defer test.MockVariableValue(&gothic.CompleteUserAuth, func(res http.ResponseWriter, req *http.Request) (goth.User, error) {
+			return goth.User{Provider: "dummy-auth-source", UserID: "dummy-user"}, nil
+		})()
+		mockOpt := contexttest.MockContextOption{SessionStore: session.NewMockMemStore("dummy-sid")}
+		ctx, resp := contexttest.MockContext(t, "/user/oauth2/dummy-auth-source/callback?code=dummy-code", mockOpt)
+		ctx.SetPathParam("provider", "dummy-auth-source")
+		SignInOAuthCallback(ctx)
+		assert.Equal(t, http.StatusSeeOther, resp.Code)
+		assert.Equal(t, "/user/link_account", test.RedirectURL(resp))
+
+		// then the user will be redirected to the link account page, and see a message about the missing fields
+		ctx, _ = contexttest.MockContext(t, "/user/link_account", mockOpt)
+		LinkAccount(ctx)
+		assert.EqualValues(t, "auth.oauth_callback_unable_auto_reg:dummy-auth-source,email", ctx.Data["AutoRegistrationFailedPrompt"])
+	})
+
+	t.Run("OAuth2CallbackError", func(t *testing.T) {
+		mockOpt := contexttest.MockContextOption{SessionStore: session.NewMockMemStore("dummy-sid")}
+		ctx, resp := contexttest.MockContext(t, "/user/oauth2/dummy-auth-source/callback", mockOpt)
+		ctx.SetPathParam("provider", "dummy-auth-source")
+		SignInOAuthCallback(ctx)
+		assert.Equal(t, http.StatusSeeOther, resp.Code)
+		assert.Equal(t, "/user/login", test.RedirectURL(resp))
+		assert.Contains(t, ctx.Flash.ErrorMsg, "auth.oauth.signin.error.general")
+	})
+}

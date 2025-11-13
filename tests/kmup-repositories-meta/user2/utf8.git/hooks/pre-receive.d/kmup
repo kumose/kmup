@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+"$KMUP_ROOT/kmup" hook --config="$KMUP_ROOT/$KMUP_CONF" pre-receive

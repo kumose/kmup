@@ -1,0 +1,114 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package git
+
+import (
+	"context"
+	"fmt"
+	"net/url"
+	"strings"
+
+	"github.com/kumose/kmup/modules/git/gitcmd"
+	"github.com/kumose/kmup/modules/util"
+)
+
+// GetRemoteAddress returns remote url of git repository in the repoPath with special remote name
+func GetRemoteAddress(ctx context.Context, repoPath, remoteName string) (string, error) {
+	var cmd *gitcmd.Command
+	if DefaultFeatures().CheckVersionAtLeast("2.7") {
+		cmd = gitcmd.NewCommand("remote", "get-url").AddDynamicArguments(remoteName)
+	} else {
+		cmd = gitcmd.NewCommand("config", "--get").AddDynamicArguments("remote." + remoteName + ".url")
+	}
+
+	result, _, err := cmd.WithDir(repoPath).RunStdString(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	if len(result) > 0 {
+		result = result[:len(result)-1]
+	}
+	return result, nil
+}
+
+// ErrInvalidCloneAddr represents a "InvalidCloneAddr" kind of error.
+type ErrInvalidCloneAddr struct {
+	Host               string
+	IsURLError         bool
+	IsInvalidPath      bool
+	IsProtocolInvalid  bool
+	IsPermissionDenied bool
+	LocalPath          bool
+}
+
+// IsErrInvalidCloneAddr checks if an error is a ErrInvalidCloneAddr.
+func IsErrInvalidCloneAddr(err error) bool {
+	_, ok := err.(*ErrInvalidCloneAddr)
+	return ok
+}
+
+func (err *ErrInvalidCloneAddr) Error() string {
+	if err.IsInvalidPath {
+		return fmt.Sprintf("migration/cloning from '%s' is not allowed: the provided path is invalid", err.Host)
+	}
+	if err.IsProtocolInvalid {
+		return fmt.Sprintf("migration/cloning from '%s' is not allowed: the provided url protocol is not allowed", err.Host)
+	}
+	if err.IsPermissionDenied {
+		return fmt.Sprintf("migration/cloning from '%s' is not allowed.", err.Host)
+	}
+	if err.IsURLError {
+		return fmt.Sprintf("migration/cloning from '%s' is not allowed: the provided url is invalid", err.Host)
+	}
+
+	return fmt.Sprintf("migration/cloning from '%s' is not allowed", err.Host)
+}
+
+func (err *ErrInvalidCloneAddr) Unwrap() error {
+	return util.ErrInvalidArgument
+}
+
+// IsRemoteNotExistError checks the prefix of the error message to see whether a remote does not exist.
+func IsRemoteNotExistError(err error) bool {
+	// Should not add space in the end, sometimes git will add a `:`
+	prefix1 := "exit status 128 - fatal: No such remote" // git < 2.30
+	prefix2 := "exit status 2 - error: No such remote"   // git >= 2.30
+	return strings.HasPrefix(err.Error(), prefix1) || strings.HasPrefix(err.Error(), prefix2)
+}
+
+// ParseRemoteAddr checks if given remote address is valid,
+// and returns composed URL with needed username and password.
+func ParseRemoteAddr(remoteAddr, authUsername, authPassword string) (string, error) {
+	remoteAddr = strings.TrimSpace(remoteAddr)
+	// Remote address can be HTTP/HTTPS/Git URL or local path.
+	if strings.HasPrefix(remoteAddr, "http://") ||
+		strings.HasPrefix(remoteAddr, "https://") ||
+		strings.HasPrefix(remoteAddr, "git://") {
+		u, err := url.Parse(remoteAddr)
+		if err != nil {
+			return "", &ErrInvalidCloneAddr{IsURLError: true, Host: remoteAddr}
+		}
+		if len(authUsername)+len(authPassword) > 0 {
+			u.User = url.UserPassword(authUsername, authPassword)
+		}
+		remoteAddr = u.String()
+	}
+
+	return remoteAddr, nil
+}

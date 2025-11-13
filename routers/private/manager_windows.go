@@ -1,0 +1,41 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+//go:build windows
+
+package private
+
+import (
+	"net/http"
+
+	"github.com/kumose/kmup/modules/graceful"
+	"github.com/kumose/kmup/modules/private"
+	"github.com/kumose/kmup/services/context"
+)
+
+// Restart is not implemented for Windows based servers as they can't fork
+func Restart(ctx *context.PrivateContext) {
+	ctx.JSON(http.StatusNotImplemented, private.Response{
+		UserMsg: "windows servers cannot be gracefully restarted - shutdown and restart manually",
+	})
+}
+
+// Shutdown causes the server to perform a graceful shutdown
+func Shutdown(ctx *context.PrivateContext) {
+	graceful.GetManager().DoGracefulShutdown()
+	ctx.PlainText(http.StatusOK, "success")
+}

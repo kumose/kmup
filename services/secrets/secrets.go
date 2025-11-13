@@ -1,0 +1,93 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package secrets
+
+import (
+	"context"
+
+	"github.com/kumose/kmup/models/db"
+	secret_model "github.com/kumose/kmup/models/secret"
+)
+
+func CreateOrUpdateSecret(ctx context.Context, ownerID, repoID int64, name, data, description string) (*secret_model.Secret, bool, error) {
+	if err := ValidateName(name); err != nil {
+		return nil, false, err
+	}
+
+	s, err := db.Find[secret_model.Secret](ctx, secret_model.FindSecretsOptions{
+		OwnerID: ownerID,
+		RepoID:  repoID,
+		Name:    name,
+	})
+	if err != nil {
+		return nil, false, err
+	}
+
+	if len(s) == 0 {
+		s, err := secret_model.InsertEncryptedSecret(ctx, ownerID, repoID, name, data, description)
+		if err != nil {
+			return nil, false, err
+		}
+		return s, true, nil
+	}
+
+	if err := secret_model.UpdateSecret(ctx, s[0].ID, data, description); err != nil {
+		return nil, false, err
+	}
+
+	return s[0], false, nil
+}
+
+func DeleteSecretByID(ctx context.Context, ownerID, repoID, secretID int64) error {
+	s, err := db.Find[secret_model.Secret](ctx, secret_model.FindSecretsOptions{
+		OwnerID:  ownerID,
+		RepoID:   repoID,
+		SecretID: secretID,
+	})
+	if err != nil {
+		return err
+	}
+	if len(s) != 1 {
+		return secret_model.ErrSecretNotFound{}
+	}
+
+	return deleteSecret(ctx, s[0])
+}
+
+func DeleteSecretByName(ctx context.Context, ownerID, repoID int64, name string) error {
+	s, err := db.Find[secret_model.Secret](ctx, secret_model.FindSecretsOptions{
+		OwnerID: ownerID,
+		RepoID:  repoID,
+		Name:    name,
+	})
+	if err != nil {
+		return err
+	}
+	if len(s) != 1 {
+		return secret_model.ErrSecretNotFound{}
+	}
+
+	return deleteSecret(ctx, s[0])
+}
+
+func deleteSecret(ctx context.Context, s *secret_model.Secret) error {
+	if _, err := db.DeleteByID[secret_model.Secret](ctx, s.ID); err != nil {
+		return err
+	}
+	return nil
+}

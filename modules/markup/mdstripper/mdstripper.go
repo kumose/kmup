@@ -1,0 +1,213 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package mdstripper
+
+import (
+	"bytes"
+	"io"
+	"net/url"
+	"strings"
+	"sync"
+
+	"github.com/kumose/kmup/modules/log"
+	"github.com/kumose/kmup/modules/markup/common"
+	"github.com/kumose/kmup/modules/setting"
+
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/parser"
+	"github.com/yuin/goldmark/renderer"
+	"github.com/yuin/goldmark/renderer/html"
+	"github.com/yuin/goldmark/text"
+)
+
+var (
+	kmupHostInit sync.Once
+	kmupHost     *url.URL
+)
+
+type stripRenderer struct {
+	localhost *url.URL
+	links     []string
+	empty     bool
+}
+
+func (r *stripRenderer) Render(w io.Writer, source []byte, doc ast.Node) error {
+	return ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		switch v := n.(type) {
+		case *ast.Text:
+			if !v.IsRaw() {
+				_, prevSibIsText := n.PreviousSibling().(*ast.Text)
+				coalesce := prevSibIsText
+				r.processString(
+					w,
+					v.Text(source), //nolint:staticcheck // Text is deprecated
+					coalesce)
+				if v.SoftLineBreak() {
+					r.doubleSpace(w)
+				}
+			}
+			return ast.WalkContinue, nil
+		case *ast.Link:
+			r.processLink(v.Destination)
+			return ast.WalkSkipChildren, nil
+		case *ast.AutoLink:
+			// This could be a reference to an issue or pull - if so convert it
+			r.processAutoLink(w, v.URL(source))
+			return ast.WalkSkipChildren, nil
+		}
+		return ast.WalkContinue, nil
+	})
+}
+
+func (r *stripRenderer) doubleSpace(w io.Writer) {
+	if !r.empty {
+		_, _ = w.Write([]byte{'\n'})
+	}
+}
+
+func (r *stripRenderer) processString(w io.Writer, text []byte, coalesce bool) {
+	// Always break-up words
+	if !coalesce {
+		r.doubleSpace(w)
+	}
+	_, _ = w.Write(text)
+	r.empty = false
+}
+
+// ProcessAutoLinks to detect and handle links to issues and pulls
+func (r *stripRenderer) processAutoLink(w io.Writer, link []byte) {
+	linkStr := string(link)
+	u, err := url.Parse(linkStr)
+	if err != nil {
+		// Process out of band
+		r.links = append(r.links, linkStr)
+		return
+	}
+
+	// Note: we're not attempting to match the URL scheme (http/https)
+	if u.Host != "" && !strings.EqualFold(u.Host, r.localhost.Host) {
+		// Process out of band
+		r.links = append(r.links, linkStr)
+		return
+	}
+
+	// We want: /user/repo/issues/3
+	parts := strings.Split(strings.TrimPrefix(u.EscapedPath(), r.localhost.EscapedPath()), "/")
+	if len(parts) != 5 || parts[0] != "" {
+		// Process out of band
+		r.links = append(r.links, linkStr)
+		return
+	}
+
+	var sep string
+	switch parts[3] {
+	case "issues":
+		sep = "#"
+	case "pulls":
+		sep = "!"
+	default:
+		// Process out of band
+		r.links = append(r.links, linkStr)
+		return
+	}
+
+	_, _ = w.Write([]byte(parts[1]))
+	_, _ = w.Write([]byte("/"))
+	_, _ = w.Write([]byte(parts[2]))
+	_, _ = w.Write([]byte(sep))
+	_, _ = w.Write([]byte(parts[4]))
+}
+
+func (r *stripRenderer) processLink(link []byte) {
+	// Links are processed out of band
+	r.links = append(r.links, string(link))
+}
+
+// GetLinks returns the list of link data collected while parsing
+func (r *stripRenderer) GetLinks() []string {
+	return r.links
+}
+
+// AddOptions adds given option to this renderer.
+func (r *stripRenderer) AddOptions(...renderer.Option) {
+	// no-op
+}
+
+// StripMarkdown parses markdown content by removing all markup and code blocks
+// in order to extract links and other references
+func StripMarkdown(rawBytes []byte) (string, []string) {
+	buf, links := StripMarkdownBytes(rawBytes)
+	return string(buf), links
+}
+
+var (
+	stripParser parser.Parser
+	once        = sync.Once{}
+)
+
+// StripMarkdownBytes parses markdown content by removing all markup and code blocks
+// in order to extract links and other references
+func StripMarkdownBytes(rawBytes []byte) ([]byte, []string) {
+	once.Do(func() {
+		gdMarkdown := goldmark.New(
+			goldmark.WithExtensions(extension.Table,
+				extension.Strikethrough,
+				extension.TaskList,
+				extension.DefinitionList,
+				common.FootnoteExtension,
+				common.Linkify,
+			),
+			goldmark.WithParserOptions(
+				parser.WithAttribute(),
+				parser.WithAutoHeadingID(),
+			),
+			goldmark.WithRendererOptions(
+				html.WithUnsafe(),
+			),
+		)
+		stripParser = gdMarkdown.Parser()
+	})
+	stripper := &stripRenderer{
+		localhost: getKmupHost(),
+		links:     make([]string, 0, 10),
+		empty:     true,
+	}
+	reader := text.NewReader(rawBytes)
+	doc := stripParser.Parse(reader)
+	var buf bytes.Buffer
+	if err := stripper.Render(&buf, rawBytes, doc); err != nil {
+		log.Error("Unable to strip: %v", err)
+	}
+	return buf.Bytes(), stripper.GetLinks()
+}
+
+// getKmupHostName returns a normalized string with the local host name, with no scheme or port information
+func getKmupHost() *url.URL {
+	kmupHostInit.Do(func() {
+		var err error
+		if kmupHost, err = url.Parse(setting.AppURL); err != nil {
+			kmupHost = &url.URL{}
+		}
+	})
+	return kmupHost
+}

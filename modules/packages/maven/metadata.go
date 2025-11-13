@@ -1,0 +1,125 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package maven
+
+import (
+	"encoding/xml"
+	"io"
+
+	"github.com/kumose/kmup/modules/util"
+	"github.com/kumose/kmup/modules/validation"
+
+	"golang.org/x/net/html/charset"
+)
+
+// Metadata represents the metadata of a Maven package
+type Metadata struct {
+	GroupID      string        `json:"group_id,omitempty"`
+	ArtifactID   string        `json:"artifact_id,omitempty"`
+	Name         string        `json:"name,omitempty"`
+	Description  string        `json:"description,omitempty"`
+	ProjectURL   string        `json:"project_url,omitempty"`
+	Licenses     []string      `json:"licenses,omitempty"`
+	Dependencies []*Dependency `json:"dependencies,omitempty"`
+}
+
+// Dependency represents a dependency of a Maven package
+type Dependency struct {
+	GroupID    string `json:"group_id,omitempty"`
+	ArtifactID string `json:"artifact_id,omitempty"`
+	Version    string `json:"version,omitempty"`
+}
+
+type pomStruct struct {
+	XMLName xml.Name `xml:"project"`
+
+	Parent struct {
+		GroupID    string `xml:"groupId"`
+		ArtifactID string `xml:"artifactId"`
+		Version    string `xml:"version"`
+	} `xml:"parent"`
+
+	GroupID     string `xml:"groupId"`
+	ArtifactID  string `xml:"artifactId"`
+	Version     string `xml:"version"`
+	Name        string `xml:"name"`
+	Description string `xml:"description"`
+	URL         string `xml:"url"`
+
+	Licenses []struct {
+		Name         string `xml:"name"`
+		URL          string `xml:"url"`
+		Distribution string `xml:"distribution"`
+	} `xml:"licenses>license"`
+
+	Dependencies []struct {
+		GroupID    string `xml:"groupId"`
+		ArtifactID string `xml:"artifactId"`
+		Version    string `xml:"version"`
+		Scope      string `xml:"scope"`
+	} `xml:"dependencies>dependency"`
+}
+
+// ParsePackageMetaData parses the metadata of a pom file
+func ParsePackageMetaData(r io.Reader) (*Metadata, error) {
+	var pom pomStruct
+
+	dec := xml.NewDecoder(r)
+	dec.CharsetReader = charset.NewReaderLabel
+	if err := dec.Decode(&pom); err != nil {
+		return nil, err
+	}
+
+	if !validation.IsValidURL(pom.URL) {
+		pom.URL = ""
+	}
+
+	licenses := make([]string, 0, len(pom.Licenses))
+	for _, l := range pom.Licenses {
+		if l.Name != "" {
+			licenses = append(licenses, l.Name)
+		}
+	}
+
+	dependencies := make([]*Dependency, 0, len(pom.Dependencies))
+	for _, d := range pom.Dependencies {
+		dependencies = append(dependencies, &Dependency{
+			GroupID:    d.GroupID,
+			ArtifactID: d.ArtifactID,
+			Version:    d.Version,
+		})
+	}
+
+	pomGroupID := pom.GroupID
+	if pomGroupID == "" {
+		// the current module could inherit parent: https://maven.apache.org/pom.html#Inheritance
+		pomGroupID = pom.Parent.GroupID
+	}
+	if pomGroupID == "" {
+		return nil, util.ErrInvalidArgument
+	}
+	return &Metadata{
+		GroupID:      pomGroupID,
+		ArtifactID:   pom.ArtifactID,
+		Name:         pom.Name,
+		Description:  pom.Description,
+		ProjectURL:   pom.URL,
+		Licenses:     licenses,
+		Dependencies: dependencies,
+	}, nil
+}

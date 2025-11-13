@@ -1,0 +1,234 @@
+// Copyright (C) Kumo inc. and its affiliates.
+// Author: Jeff.li lijippy@163.com
+// All rights reserved.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+package repo
+
+import (
+	"errors"
+	"fmt"
+	"net/http"
+
+	"github.com/kumose/kmup/models/organization"
+	"github.com/kumose/kmup/models/perm"
+	access_model "github.com/kumose/kmup/models/perm/access"
+	repo_model "github.com/kumose/kmup/models/repo"
+	user_model "github.com/kumose/kmup/models/user"
+	"github.com/kumose/kmup/modules/log"
+	api "github.com/kumose/kmup/modules/structs"
+	"github.com/kumose/kmup/modules/util"
+	"github.com/kumose/kmup/modules/web"
+	"github.com/kumose/kmup/services/context"
+	"github.com/kumose/kmup/services/convert"
+	repo_service "github.com/kumose/kmup/services/repository"
+)
+
+// Transfer transfers the ownership of a repository
+func Transfer(ctx *context.APIContext) {
+	// swagger:operation POST /repos/{owner}/{repo}/transfer repository repoTransfer
+	// ---
+	// summary: Transfer a repo ownership
+	// produces:
+	// - application/json
+	// parameters:
+	// - name: owner
+	//   in: path
+	//   description: owner of the repo to transfer
+	//   type: string
+	//   required: true
+	// - name: repo
+	//   in: path
+	//   description: name of the repo to transfer
+	//   type: string
+	//   required: true
+	// - name: body
+	//   in: body
+	//   description: "Transfer Options"
+	//   required: true
+	//   schema:
+	//     "$ref": "#/definitions/TransferRepoOption"
+	// responses:
+	//   "202":
+	//     "$ref": "#/responses/Repository"
+	//   "403":
+	//     "$ref": "#/responses/forbidden"
+	//   "404":
+	//     "$ref": "#/responses/notFound"
+	//   "422":
+	//     "$ref": "#/responses/validationError"
+
+	opts := web.GetForm(ctx).(*api.TransferRepoOption)
+
+	newOwner, err := user_model.GetUserByName(ctx, opts.NewOwner)
+	if err != nil {
+		if user_model.IsErrUserNotExist(err) {
+			ctx.APIError(http.StatusNotFound, "The new owner does not exist or cannot be found")
+			return
+		}
+		ctx.APIErrorInternal(err)
+		return
+	}
+
+	if newOwner.Type == user_model.UserTypeOrganization {
+		if !ctx.Doer.IsAdmin && newOwner.Visibility == api.VisibleTypePrivate && !organization.OrgFromUser(newOwner).HasMemberWithUserID(ctx, ctx.Doer.ID) {
+			// The user shouldn't know about this organization
+			ctx.APIError(http.StatusNotFound, "The new owner does not exist or cannot be found")
+			return
+		}
+	}
+
+	var teams []*organization.Team
+	if opts.TeamIDs != nil {
+		if !newOwner.IsOrganization() {
+			ctx.APIError(http.StatusUnprocessableEntity, "Teams can only be added to organization-owned repositories")
+			return
+		}
+
+		org := convert.ToOrganization(ctx, organization.OrgFromUser(newOwner))
+		for _, tID := range *opts.TeamIDs {
+			team, err := organization.GetTeamByID(ctx, tID)
+			if err != nil {
+				ctx.APIError(http.StatusUnprocessableEntity, fmt.Errorf("team %d not found", tID))
+				return
+			}
+
+			if team.OrgID != org.ID {
+				ctx.APIError(http.StatusForbidden, fmt.Errorf("team %d belongs not to org %d", tID, org.ID))
+				return
+			}
+
+			teams = append(teams, team)
+		}
+	}
+
+	if ctx.Repo.GitRepo != nil {
+		_ = ctx.Repo.GitRepo.Close()
+		ctx.Repo.GitRepo = nil
+	}
+
+	oldFullname := ctx.Repo.Repository.FullName()
+
+	if err := repo_service.StartRepositoryTransfer(ctx, ctx.Doer, newOwner, ctx.Repo.Repository, teams); err != nil {
+		switch {
+		case repo_model.IsErrRepoTransferInProgress(err):
+			ctx.APIError(http.StatusConflict, err)
+		case repo_model.IsErrRepoAlreadyExist(err):
+			ctx.APIError(http.StatusUnprocessableEntity, err)
+		case repo_service.IsRepositoryLimitReached(err):
+			ctx.APIError(http.StatusForbidden, err)
+		case errors.Is(err, user_model.ErrBlockedUser):
+			ctx.APIError(http.StatusForbidden, err)
+		default:
+			ctx.APIErrorInternal(err)
+		}
+		return
+	}
+
+	if ctx.Repo.Repository.Status == repo_model.RepositoryPendingTransfer {
+		log.Trace("Repository transfer initiated: %s -> %s", oldFullname, ctx.Repo.Repository.FullName())
+		ctx.JSON(http.StatusCreated, convert.ToRepo(ctx, ctx.Repo.Repository, access_model.Permission{AccessMode: perm.AccessModeAdmin}))
+		return
+	}
+
+	log.Trace("Repository transferred: %s -> %s", oldFullname, ctx.Repo.Repository.FullName())
+	ctx.JSON(http.StatusAccepted, convert.ToRepo(ctx, ctx.Repo.Repository, access_model.Permission{AccessMode: perm.AccessModeAdmin}))
+}
+
+// AcceptTransfer accept a repo transfer
+func AcceptTransfer(ctx *context.APIContext) {
+	// swagger:operation POST /repos/{owner}/{repo}/transfer/accept repository acceptRepoTransfer
+	// ---
+	// summary: Accept a repo transfer
+	// produces:
+	// - application/json
+	// parameters:
+	// - name: owner
+	//   in: path
+	//   description: owner of the repo to transfer
+	//   type: string
+	//   required: true
+	// - name: repo
+	//   in: path
+	//   description: name of the repo to transfer
+	//   type: string
+	//   required: true
+	// responses:
+	//   "202":
+	//     "$ref": "#/responses/Repository"
+	//   "403":
+	//     "$ref": "#/responses/forbidden"
+	//   "404":
+	//     "$ref": "#/responses/notFound"
+
+	err := repo_service.AcceptTransferOwnership(ctx, ctx.Repo.Repository, ctx.Doer)
+	if err != nil {
+		switch {
+		case repo_model.IsErrNoPendingTransfer(err):
+			ctx.APIError(http.StatusNotFound, err)
+		case errors.Is(err, util.ErrPermissionDenied):
+			ctx.APIError(http.StatusForbidden, err)
+		case repo_service.IsRepositoryLimitReached(err):
+			ctx.APIError(http.StatusForbidden, err)
+		default:
+			ctx.APIErrorInternal(err)
+		}
+		return
+	}
+
+	ctx.JSON(http.StatusAccepted, convert.ToRepo(ctx, ctx.Repo.Repository, ctx.Repo.Permission))
+}
+
+// RejectTransfer reject a repo transfer
+func RejectTransfer(ctx *context.APIContext) {
+	// swagger:operation POST /repos/{owner}/{repo}/transfer/reject repository rejectRepoTransfer
+	// ---
+	// summary: Reject a repo transfer
+	// produces:
+	// - application/json
+	// parameters:
+	// - name: owner
+	//   in: path
+	//   description: owner of the repo to transfer
+	//   type: string
+	//   required: true
+	// - name: repo
+	//   in: path
+	//   description: name of the repo to transfer
+	//   type: string
+	//   required: true
+	// responses:
+	//   "200":
+	//     "$ref": "#/responses/Repository"
+	//   "403":
+	//     "$ref": "#/responses/forbidden"
+	//   "404":
+	//     "$ref": "#/responses/notFound"
+
+	err := repo_service.RejectRepositoryTransfer(ctx, ctx.Repo.Repository, ctx.Doer)
+	if err != nil {
+		switch {
+		case repo_model.IsErrNoPendingTransfer(err):
+			ctx.APIError(http.StatusNotFound, err)
+		case errors.Is(err, util.ErrPermissionDenied):
+			ctx.APIError(http.StatusForbidden, err)
+		default:
+			ctx.APIErrorInternal(err)
+		}
+		return
+	}
+
+	ctx.JSON(http.StatusOK, convert.ToRepo(ctx, ctx.Repo.Repository, ctx.Repo.Permission))
+}
