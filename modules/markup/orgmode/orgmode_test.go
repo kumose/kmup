@@ -30,7 +30,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	setting.AppURL = "http://localhost:3000/"
+	setting.AppURL = "http://localhost:3326/"
 	setting.IsInTesting = true
 	os.Exit(m.Run())
 }

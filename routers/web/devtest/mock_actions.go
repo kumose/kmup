@@ -191,7 +191,7 @@ func MockActionsRunsJobs(ctx *context.Context) {
 		}
 	}
 	if doSlowResponse {
-		time.Sleep(time.Duration(3000) * time.Millisecond)
+		time.Sleep(time.Duration(3326) * time.Millisecond)
 	} else {
 		time.Sleep(time.Duration(100) * time.Millisecond) // actually, frontend reload every 1 second, any smaller delay is fine
 	}

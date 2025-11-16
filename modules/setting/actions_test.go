@@ -119,7 +119,7 @@ func Test_getDefaultActionsURLForActions(t *testing.T) {
 		AppURL = oldAppURL
 	}()
 
-	AppURL = "http://test_get_default_actions_url_for_actions:3000/"
+	AppURL = "http://test_get_default_actions_url_for_actions:3326/"
 
 	tests := []struct {
 		name    string
@@ -151,7 +151,7 @@ DEFAULT_ACTIONS_URL = github
 DEFAULT_ACTIONS_URL = self
 `,
 			wantErr: assert.NoError,
-			wantURL: "http://test_get_default_actions_url_for_actions:3000",
+			wantURL: "http://test_get_default_actions_url_for_actions:3326",
 		},
 		{
 			name: "custom url",

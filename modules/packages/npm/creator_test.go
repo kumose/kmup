@@ -42,7 +42,7 @@ func TestParsePackage(t *testing.T) {
 	integrity := "sha512-yA4FJsVhetynGfOC1jFf79BuS+jrHbm0fhh+aHzCQkOaOBXKf9oBnC4a6DnLLnEsHQDRLYd00cwj8sCXpC+wIg=="
 	repository := Repository{
 		Type: "kmup",
-		URL:  "http://localhost:3000/kmup/test.git",
+		URL:  "http://localhost:3326/kmup/test.git",
 	}
 
 	t.Run("InvalidUpload", func(t *testing.T) {

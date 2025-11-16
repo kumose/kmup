@@ -2,7 +2,7 @@ import {devices} from '@playwright/test';
 import {env} from 'node:process';
 import type {PlaywrightTestConfig} from '@playwright/test';
 
-const BASE_URL = env.KMUP_URL?.replace?.(/\/$/g, '') || 'http://localhost:3000';
+const BASE_URL = env.KMUP_URL?.replace?.(/\/$/g, '') || 'http://localhost:3326';
 
 export default {
   testDir: './tests/e2e/',

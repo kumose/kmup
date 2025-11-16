@@ -120,7 +120,7 @@ func TestFindAllIssueReferences(t *testing.T) {
 			},
 		},
 		{
-			"This [four](http://kmup.com:3000/org3/repo4/issues/203) yes.",
+			"This [four](http://kmup.com:3326/org3/repo4/issues/203) yes.",
 			[]testResult{
 				{203, "org3", "repo4", "203", false, XRefActionNone, nil, nil, ""},
 			},
@@ -130,24 +130,24 @@ func TestFindAllIssueReferences(t *testing.T) {
 			[]testResult{},
 		},
 		{
-			"This http://kmup.com:3000/user4/repo5/201 no, bad URL.",
+			"This http://kmup.com:3326/user4/repo5/201 no, bad URL.",
 			[]testResult{},
 		},
 		{
-			"This http://kmup.com:3000/user4/repo5/pulls/202 yes.",
+			"This http://kmup.com:3326/user4/repo5/pulls/202 yes.",
 			[]testResult{
 				{202, "user4", "repo5", "202", true, XRefActionNone, nil, nil, ""},
 			},
 		},
 		{
-			"This http://kmup.com:3000/user4/repo5/pulls/202 yes. http://kmup.com:3000/user4/repo5/pulls/203 no",
+			"This http://kmup.com:3326/user4/repo5/pulls/202 yes. http://kmup.com:3326/user4/repo5/pulls/203 no",
 			[]testResult{
 				{202, "user4", "repo5", "202", true, XRefActionNone, nil, nil, ""},
 				{203, "user4", "repo5", "203", true, XRefActionNone, nil, nil, ""},
 			},
 		},
 		{
-			"This http://KmUp.COM:3000/user4/repo6/pulls/205 yes.",
+			"This http://KmUp.COM:3326/user4/repo6/pulls/205 yes.",
 			[]testResult{
 				{205, "user4", "repo6", "205", true, XRefActionNone, nil, nil, ""},
 			},
@@ -278,7 +278,7 @@ func TestFindAllIssueReferences(t *testing.T) {
 func testFixtures(t *testing.T, fixtures []testFixture, context string) {
 	// Save original value for other tests that may rely on it
 	prevURL := setting.AppURL
-	setting.AppURL = "https://kmup.com:3000/"
+	setting.AppURL = "https://kmup.com:3326/"
 
 	for _, fixture := range fixtures {
 		expraw := make([]*rawReference, len(fixture.expected))

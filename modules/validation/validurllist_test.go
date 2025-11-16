@@ -46,7 +46,7 @@ func Test_ValidURLListValidation(t *testing.T) {
 		{
 			description: "URL with port",
 			data: TestForm{
-				URLs: "http://test.lan:3000/",
+				URLs: "http://test.lan:3326/",
 			},
 			expectedErrors: binding.Errors{},
 		},
@@ -60,7 +60,7 @@ func Test_ValidURLListValidation(t *testing.T) {
 		{
 			description: "URL with IPv6 address with port",
 			data: TestForm{
-				URLs: "http://[::1]:3000/",
+				URLs: "http://[::1]:3326/",
 			},
 			expectedErrors: binding.Errors{},
 		},
@@ -119,21 +119,21 @@ func Test_ValidURLListValidation(t *testing.T) {
 		{
 			description: "Multi URLs",
 			data: TestForm{
-				URLs: "http://test.lan:3000/\nhttp://test.local/",
+				URLs: "http://test.lan:3326/\nhttp://test.local/",
 			},
 			expectedErrors: binding.Errors{},
 		},
 		{
 			description: "Multi URLs with newline",
 			data: TestForm{
-				URLs: "http://test.lan:3000/\nhttp://test.local/\n",
+				URLs: "http://test.lan:3326/\nhttp://test.local/\n",
 			},
 			expectedErrors: binding.Errors{},
 		},
 		{
 			description: "List with invalid entry",
 			data: TestForm{
-				URLs: "http://test.lan:3000/\nhttp://[::1]:3x4/",
+				URLs: "http://test.lan:3326/\nhttp://[::1]:3x4/",
 			},
 			expectedErrors: binding.Errors{
 				binding.Error{
@@ -146,13 +146,13 @@ func Test_ValidURLListValidation(t *testing.T) {
 		{
 			description: "List with two invalid entries",
 			data: TestForm{
-				URLs: "ftp://test.lan:3000/\nhttp://[::1]:3x4/\n",
+				URLs: "ftp://test.lan:3326/\nhttp://[::1]:3x4/\n",
 			},
 			expectedErrors: binding.Errors{
 				binding.Error{
 					FieldNames:     []string{"URLs"},
 					Classification: binding.ERR_URL,
-					Message:        "ftp://test.lan:3000/",
+					Message:        "ftp://test.lan:3326/",
 				},
 				binding.Error{
 					FieldNames:     []string{"URLs"},

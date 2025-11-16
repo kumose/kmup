@@ -37,7 +37,7 @@
     }
   },
   "portsAttributes": {
-    "3000": {
+    "3326": {
       "label": "Kmup Web",
       "onAutoForward": "notify"
     }

@@ -104,8 +104,8 @@ test('toAbsoluteUrl', () => {
   expect(toAbsoluteUrl('//host/dir')).toEqual('http://host/dir');
   expect(toAbsoluteUrl('https://host/dir')).toEqual('https://host/dir');
 
-  expect(toAbsoluteUrl('')).toEqual('http://localhost:3000');
-  expect(toAbsoluteUrl('/user/repo')).toEqual('http://localhost:3000/user/repo');
+  expect(toAbsoluteUrl('')).toEqual('http://localhost:3326');
+  expect(toAbsoluteUrl('/user/repo')).toEqual('http://localhost:3326/user/repo');
 
   expect(() => toAbsoluteUrl('path')).toThrowError('unsupported');
 });

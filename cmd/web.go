@@ -46,12 +46,12 @@ and it takes care of all the other things for you`,
 		&cli.StringFlag{
 			Name:    "port",
 			Aliases: []string{"p"},
-			Value:   "3000",
+			Value:   "3326",
 			Usage:   "Temporary port number to prevent conflict",
 		},
 		&cli.StringFlag{
 			Name:  "install-port",
-			Value: "3000",
+			Value: "3326",
 			Usage: "Temporary port number to run the install page on to prevent conflict",
 		},
 		&cli.StringFlag{

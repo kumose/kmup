@@ -51,7 +51,7 @@ func TestDingTalkPayload(t *testing.T) {
 		assert.Equal(t, "[test/repo] branch test created", pl.ActionCard.Text)
 		assert.Equal(t, "[test/repo] branch test created", pl.ActionCard.Title)
 		assert.Equal(t, "view ref test", pl.ActionCard.SingleTitle)
-		assert.Equal(t, "http://localhost:3000/test/repo/src/test", parseRealSingleURL(pl.ActionCard.SingleURL))
+		assert.Equal(t, "http://localhost:3326/test/repo/src/test", parseRealSingleURL(pl.ActionCard.SingleURL))
 	})
 
 	t.Run("Delete", func(t *testing.T) {
@@ -63,7 +63,7 @@ func TestDingTalkPayload(t *testing.T) {
 		assert.Equal(t, "[test/repo] branch test deleted", pl.ActionCard.Text)
 		assert.Equal(t, "[test/repo] branch test deleted", pl.ActionCard.Title)
 		assert.Equal(t, "view ref test", pl.ActionCard.SingleTitle)
-		assert.Equal(t, "http://localhost:3000/test/repo/src/test", parseRealSingleURL(pl.ActionCard.SingleURL))
+		assert.Equal(t, "http://localhost:3326/test/repo/src/test", parseRealSingleURL(pl.ActionCard.SingleURL))
 	})
 
 	t.Run("Fork", func(t *testing.T) {
@@ -75,7 +75,7 @@ func TestDingTalkPayload(t *testing.T) {
 		assert.Equal(t, "test/repo2 is forked to test/repo", pl.ActionCard.Text)
 		assert.Equal(t, "test/repo2 is forked to test/repo", pl.ActionCard.Title)
 		assert.Equal(t, "view forked repo test/repo", pl.ActionCard.SingleTitle)
-		assert.Equal(t, "http://localhost:3000/test/repo", parseRealSingleURL(pl.ActionCard.SingleURL))
+		assert.Equal(t, "http://localhost:3326/test/repo", parseRealSingleURL(pl.ActionCard.SingleURL))
 	})
 
 	t.Run("Push", func(t *testing.T) {
@@ -84,10 +84,10 @@ func TestDingTalkPayload(t *testing.T) {
 		pl, err := dc.Push(p)
 		require.NoError(t, err)
 
-		assert.Equal(t, "[2020558](http://localhost:3000/test/repo/commit/2020558fe2e34debb818a514715839cabd25e778) commit message - user1\r\n[2020558](http://localhost:3000/test/repo/commit/2020558fe2e34debb818a514715839cabd25e778) commit message - user1", pl.ActionCard.Text)
+		assert.Equal(t, "[2020558](http://localhost:3326/test/repo/commit/2020558fe2e34debb818a514715839cabd25e778) commit message - user1\r\n[2020558](http://localhost:3326/test/repo/commit/2020558fe2e34debb818a514715839cabd25e778) commit message - user1", pl.ActionCard.Text)
 		assert.Equal(t, "[test/repo:test] 2 new commits", pl.ActionCard.Title)
 		assert.Equal(t, "view commits", pl.ActionCard.SingleTitle)
-		assert.Equal(t, "http://localhost:3000/test/repo/src/test", parseRealSingleURL(pl.ActionCard.SingleURL))
+		assert.Equal(t, "http://localhost:3326/test/repo/src/test", parseRealSingleURL(pl.ActionCard.SingleURL))
 	})
 
 	t.Run("Issue", func(t *testing.T) {
@@ -100,7 +100,7 @@ func TestDingTalkPayload(t *testing.T) {
 		assert.Equal(t, "[test/repo] Issue opened: #2 crash by user1\r\n\r\nissue body", pl.ActionCard.Text)
 		assert.Equal(t, "#2 crash", pl.ActionCard.Title)
 		assert.Equal(t, "view issue", pl.ActionCard.SingleTitle)
-		assert.Equal(t, "http://localhost:3000/test/repo/issues/2", parseRealSingleURL(pl.ActionCard.SingleURL))
+		assert.Equal(t, "http://localhost:3326/test/repo/issues/2", parseRealSingleURL(pl.ActionCard.SingleURL))
 
 		p.Action = api.HookIssueClosed
 		pl, err = dc.Issue(p)
@@ -109,7 +109,7 @@ func TestDingTalkPayload(t *testing.T) {
 		assert.Equal(t, "[test/repo] Issue closed: #2 crash by user1", pl.ActionCard.Text)
 		assert.Equal(t, "#2 crash", pl.ActionCard.Title)
 		assert.Equal(t, "view issue", pl.ActionCard.SingleTitle)
-		assert.Equal(t, "http://localhost:3000/test/repo/issues/2", parseRealSingleURL(pl.ActionCard.SingleURL))
+		assert.Equal(t, "http://localhost:3326/test/repo/issues/2", parseRealSingleURL(pl.ActionCard.SingleURL))
 	})
 
 	t.Run("IssueComment", func(t *testing.T) {
@@ -121,7 +121,7 @@ func TestDingTalkPayload(t *testing.T) {
 		assert.Equal(t, "[test/repo] New comment on issue #2 crash by user1\r\n\r\nmore info needed", pl.ActionCard.Text)
 		assert.Equal(t, "#2 crash", pl.ActionCard.Title)
 		assert.Equal(t, "view issue comment", pl.ActionCard.SingleTitle)
-		assert.Equal(t, "http://localhost:3000/test/repo/issues/2#issuecomment-4", parseRealSingleURL(pl.ActionCard.SingleURL))
+		assert.Equal(t, "http://localhost:3326/test/repo/issues/2#issuecomment-4", parseRealSingleURL(pl.ActionCard.SingleURL))
 	})
 
 	t.Run("PullRequest", func(t *testing.T) {
@@ -133,7 +133,7 @@ func TestDingTalkPayload(t *testing.T) {
 		assert.Equal(t, "[test/repo] Pull request opened: #12 Fix bug by user1\r\n\r\nfixes bug #2", pl.ActionCard.Text)
 		assert.Equal(t, "#12 Fix bug", pl.ActionCard.Title)
 		assert.Equal(t, "view pull request", pl.ActionCard.SingleTitle)
-		assert.Equal(t, "http://localhost:3000/test/repo/pulls/12", parseRealSingleURL(pl.ActionCard.SingleURL))
+		assert.Equal(t, "http://localhost:3326/test/repo/pulls/12", parseRealSingleURL(pl.ActionCard.SingleURL))
 	})
 
 	t.Run("PullRequestComment", func(t *testing.T) {
@@ -145,7 +145,7 @@ func TestDingTalkPayload(t *testing.T) {
 		assert.Equal(t, "[test/repo] New comment on pull request #12 Fix bug by user1\r\n\r\nchanges requested", pl.ActionCard.Text)
 		assert.Equal(t, "#12 Fix bug", pl.ActionCard.Title)
 		assert.Equal(t, "view issue comment", pl.ActionCard.SingleTitle)
-		assert.Equal(t, "http://localhost:3000/test/repo/pulls/12#issuecomment-4", parseRealSingleURL(pl.ActionCard.SingleURL))
+		assert.Equal(t, "http://localhost:3326/test/repo/pulls/12#issuecomment-4", parseRealSingleURL(pl.ActionCard.SingleURL))
 	})
 
 	t.Run("Review", func(t *testing.T) {
@@ -158,7 +158,7 @@ func TestDingTalkPayload(t *testing.T) {
 		assert.Equal(t, "[test/repo] Pull request review approved : #12 Fix bug\r\n\r\ngood job", pl.ActionCard.Text)
 		assert.Equal(t, "[test/repo] Pull request review approved : #12 Fix bug", pl.ActionCard.Title)
 		assert.Equal(t, "view pull request", pl.ActionCard.SingleTitle)
-		assert.Equal(t, "http://localhost:3000/test/repo/pulls/12", parseRealSingleURL(pl.ActionCard.SingleURL))
+		assert.Equal(t, "http://localhost:3326/test/repo/pulls/12", parseRealSingleURL(pl.ActionCard.SingleURL))
 	})
 
 	t.Run("Repository", func(t *testing.T) {
@@ -170,7 +170,7 @@ func TestDingTalkPayload(t *testing.T) {
 		assert.Equal(t, "[test/repo] Repository created", pl.ActionCard.Text)
 		assert.Equal(t, "[test/repo] Repository created", pl.ActionCard.Title)
 		assert.Equal(t, "view repository", pl.ActionCard.SingleTitle)
-		assert.Equal(t, "http://localhost:3000/test/repo", parseRealSingleURL(pl.ActionCard.SingleURL))
+		assert.Equal(t, "http://localhost:3326/test/repo", parseRealSingleURL(pl.ActionCard.SingleURL))
 	})
 
 	t.Run("Package", func(t *testing.T) {
@@ -182,7 +182,7 @@ func TestDingTalkPayload(t *testing.T) {
 		assert.Equal(t, "Package created: KmupContainer:latest by user1", pl.ActionCard.Text)
 		assert.Equal(t, "Package created: KmupContainer:latest by user1", pl.ActionCard.Title)
 		assert.Equal(t, "view package", pl.ActionCard.SingleTitle)
-		assert.Equal(t, "http://localhost:3000/user1/-/packages/container/KmupContainer/latest", parseRealSingleURL(pl.ActionCard.SingleURL))
+		assert.Equal(t, "http://localhost:3326/user1/-/packages/container/KmupContainer/latest", parseRealSingleURL(pl.ActionCard.SingleURL))
 	})
 
 	t.Run("Wiki", func(t *testing.T) {
@@ -195,7 +195,7 @@ func TestDingTalkPayload(t *testing.T) {
 		assert.Equal(t, "[test/repo] New wiki page 'index' (Wiki change comment) by user1", pl.ActionCard.Text)
 		assert.Equal(t, "[test/repo] New wiki page 'index' (Wiki change comment) by user1", pl.ActionCard.Title)
 		assert.Equal(t, "view wiki", pl.ActionCard.SingleTitle)
-		assert.Equal(t, "http://localhost:3000/test/repo/wiki/index", parseRealSingleURL(pl.ActionCard.SingleURL))
+		assert.Equal(t, "http://localhost:3326/test/repo/wiki/index", parseRealSingleURL(pl.ActionCard.SingleURL))
 
 		p.Action = api.HookWikiEdited
 		pl, err = dc.Wiki(p)
@@ -204,7 +204,7 @@ func TestDingTalkPayload(t *testing.T) {
 		assert.Equal(t, "[test/repo] Wiki page 'index' edited (Wiki change comment) by user1", pl.ActionCard.Text)
 		assert.Equal(t, "[test/repo] Wiki page 'index' edited (Wiki change comment) by user1", pl.ActionCard.Title)
 		assert.Equal(t, "view wiki", pl.ActionCard.SingleTitle)
-		assert.Equal(t, "http://localhost:3000/test/repo/wiki/index", parseRealSingleURL(pl.ActionCard.SingleURL))
+		assert.Equal(t, "http://localhost:3326/test/repo/wiki/index", parseRealSingleURL(pl.ActionCard.SingleURL))
 
 		p.Action = api.HookWikiDeleted
 		pl, err = dc.Wiki(p)
@@ -213,7 +213,7 @@ func TestDingTalkPayload(t *testing.T) {
 		assert.Equal(t, "[test/repo] Wiki page 'index' deleted by user1", pl.ActionCard.Text)
 		assert.Equal(t, "[test/repo] Wiki page 'index' deleted by user1", pl.ActionCard.Title)
 		assert.Equal(t, "view wiki", pl.ActionCard.SingleTitle)
-		assert.Equal(t, "http://localhost:3000/test/repo/wiki/index", parseRealSingleURL(pl.ActionCard.SingleURL))
+		assert.Equal(t, "http://localhost:3326/test/repo/wiki/index", parseRealSingleURL(pl.ActionCard.SingleURL))
 	})
 
 	t.Run("Release", func(t *testing.T) {
@@ -225,7 +225,7 @@ func TestDingTalkPayload(t *testing.T) {
 		assert.Equal(t, "[test/repo] Release created: v1.0 by user1", pl.ActionCard.Text)
 		assert.Equal(t, "[test/repo] Release created: v1.0 by user1", pl.ActionCard.Title)
 		assert.Equal(t, "view release", pl.ActionCard.SingleTitle)
-		assert.Equal(t, "http://localhost:3000/test/repo/releases/tag/v1.0", parseRealSingleURL(pl.ActionCard.SingleURL))
+		assert.Equal(t, "http://localhost:3326/test/repo/releases/tag/v1.0", parseRealSingleURL(pl.ActionCard.SingleURL))
 	})
 }
 
@@ -261,5 +261,5 @@ func TestDingTalkJSONPayload(t *testing.T) {
 	var body DingtalkPayload
 	err = json.NewDecoder(req.Body).Decode(&body)
 	assert.NoError(t, err)
-	assert.Equal(t, "[2020558](http://localhost:3000/test/repo/commit/2020558fe2e34debb818a514715839cabd25e778) commit message - user1\r\n[2020558](http://localhost:3000/test/repo/commit/2020558fe2e34debb818a514715839cabd25e778) commit message - user1", body.ActionCard.Text)
+	assert.Equal(t, "[2020558](http://localhost:3326/test/repo/commit/2020558fe2e34debb818a514715839cabd25e778) commit message - user1\r\n[2020558](http://localhost:3326/test/repo/commit/2020558fe2e34debb818a514715839cabd25e778) commit message - user1", body.ActionCard.Text)
 }

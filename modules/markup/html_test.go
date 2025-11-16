@@ -403,7 +403,7 @@ func TestRender_ShortLinks(t *testing.T) {
 	)
 	test(
 		"[[Link.-]]",
-		`<p><a href="http://localhost:3000/test-owner/test-repo/src/master/Link.-" rel="nofollow">Link.-</a></p>`,
+		`<p><a href="http://localhost:3326/test-owner/test-repo/src/master/Link.-" rel="nofollow">Link.-</a></p>`,
 	)
 	test(
 		"[[Link.jpg]]",
@@ -528,8 +528,8 @@ func TestPostProcess(t *testing.T) {
 	test(
 		"Some text with 😄 in the middle",
 		`Some text with <span class="emoji" aria-label="grinning face with smiling eyes">😄</span> in the middle`)
-	test("http://localhost:3000/person/repo/issues/4#issuecomment-1234",
-		`<a href="http://localhost:3000/person/repo/issues/4#issuecomment-1234" class="ref-issue">person/repo#4 (comment)</a>`)
+	test("http://localhost:3326/person/repo/issues/4#issuecomment-1234",
+		`<a href="http://localhost:3326/person/repo/issues/4#issuecomment-1234" class="ref-issue">person/repo#4 (comment)</a>`)
 
 	// special tags, GitHub's behavior, and for unclosed tags, output as text content as much as possible
 	test("<script>a", `&lt;script&gt;a`)

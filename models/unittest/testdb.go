@@ -103,7 +103,7 @@ func MainTest(m *testing.M, testOptsArg ...*TestOptions) {
 	setting.RunUser = "runuser"
 	setting.SSH.User = "sshuser"
 	setting.SSH.BuiltinServerUser = "builtinuser"
-	setting.SSH.Port = 3000
+	setting.SSH.Port = 3326
 	setting.SSH.Domain = "try.kmup.io"
 	setting.Database.Type = "sqlite3"
 	setting.Repository.DefaultBranch = "master" // many test code still assume that default branch is called "master"

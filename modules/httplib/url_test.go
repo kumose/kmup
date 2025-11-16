@@ -30,7 +30,7 @@ import (
 )
 
 func TestIsRelativeURL(t *testing.T) {
-	defer test.MockVariableValue(&setting.AppURL, "http://localhost:3000/sub/")()
+	defer test.MockVariableValue(&setting.AppURL, "http://localhost:3326/sub/")()
 	defer test.MockVariableValue(&setting.AppSubURL, "/sub")()
 	rel := []string{
 		"",
@@ -65,12 +65,12 @@ func TestGuessCurrentHostURL(t *testing.T) {
 		assert.Equal(t, "http://cfg-host", GuessCurrentHostURL(t.Context()))
 
 		// legacy: "Host" is not used when there is no "X-Forwarded-Proto" header
-		ctx := context.WithValue(t.Context(), RequestContextKey, &http.Request{Host: "req-host:3000"})
+		ctx := context.WithValue(t.Context(), RequestContextKey, &http.Request{Host: "req-host:3326"})
 		assert.Equal(t, "http://cfg-host", GuessCurrentHostURL(ctx))
 
 		// if "X-Forwarded-Proto" exists, then use it and "Host" header
-		ctx = context.WithValue(t.Context(), RequestContextKey, &http.Request{Host: "req-host:3000", Header: headersWithProto})
-		assert.Equal(t, "https://req-host:3000", GuessCurrentHostURL(ctx))
+		ctx = context.WithValue(t.Context(), RequestContextKey, &http.Request{Host: "req-host:3326", Header: headersWithProto})
+		assert.Equal(t, "https://req-host:3326", GuessCurrentHostURL(ctx))
 	})
 
 	t.Run("Auto", func(t *testing.T) {
@@ -79,14 +79,14 @@ func TestGuessCurrentHostURL(t *testing.T) {
 		assert.Equal(t, "http://cfg-host", GuessCurrentHostURL(t.Context()))
 
 		// auto: always use "Host" header, the scheme is determined by "X-Forwarded-Proto" header, or TLS config if no "X-Forwarded-Proto" header
-		ctx := context.WithValue(t.Context(), RequestContextKey, &http.Request{Host: "req-host:3000"})
-		assert.Equal(t, "http://req-host:3000", GuessCurrentHostURL(ctx))
+		ctx := context.WithValue(t.Context(), RequestContextKey, &http.Request{Host: "req-host:3326"})
+		assert.Equal(t, "http://req-host:3326", GuessCurrentHostURL(ctx))
 
 		ctx = context.WithValue(t.Context(), RequestContextKey, &http.Request{Host: "req-host", TLS: &tls.ConnectionState{}})
 		assert.Equal(t, "https://req-host", GuessCurrentHostURL(ctx))
 
-		ctx = context.WithValue(t.Context(), RequestContextKey, &http.Request{Host: "req-host:3000", Header: headersWithProto})
-		assert.Equal(t, "https://req-host:3000", GuessCurrentHostURL(ctx))
+		ctx = context.WithValue(t.Context(), RequestContextKey, &http.Request{Host: "req-host:3326", Header: headersWithProto})
+		assert.Equal(t, "https://req-host:3326", GuessCurrentHostURL(ctx))
 	})
 }
 
@@ -125,7 +125,7 @@ func TestMakeAbsoluteURL(t *testing.T) {
 }
 
 func TestIsCurrentKmupSiteURL(t *testing.T) {
-	defer test.MockVariableValue(&setting.AppURL, "http://localhost:3000/sub/")()
+	defer test.MockVariableValue(&setting.AppURL, "http://localhost:3326/sub/")()
 	defer test.MockVariableValue(&setting.AppSubURL, "/sub")()
 	ctx := t.Context()
 	good := []string{
@@ -134,8 +134,8 @@ func TestIsCurrentKmupSiteURL(t *testing.T) {
 		"/sub/",
 		"/sub/foo",
 		"/sub/foo/",
-		"http://localhost:3000/sub?key=val",
-		"http://localhost:3000/sub/",
+		"http://localhost:3326/sub?key=val",
+		"http://localhost:3326/sub/",
 	}
 	for _, s := range good {
 		assert.True(t, IsCurrentKmupSiteURL(ctx, s), "good = %q", s)
@@ -147,20 +147,20 @@ func TestIsCurrentKmupSiteURL(t *testing.T) {
 		"//",
 		"\\\\",
 		"/foo",
-		"http://localhost:3000/sub/..",
-		"http://localhost:3000/other",
+		"http://localhost:3326/sub/..",
+		"http://localhost:3326/other",
 		"http://other/",
 	}
 	for _, s := range bad {
 		assert.False(t, IsCurrentKmupSiteURL(ctx, s), "bad = %q", s)
 	}
 
-	setting.AppURL = "http://localhost:3000/"
+	setting.AppURL = "http://localhost:3326/"
 	setting.AppSubURL = ""
 	assert.False(t, IsCurrentKmupSiteURL(ctx, "//"))
 	assert.False(t, IsCurrentKmupSiteURL(ctx, "\\\\"))
 	assert.False(t, IsCurrentKmupSiteURL(ctx, "http://localhost"))
-	assert.True(t, IsCurrentKmupSiteURL(ctx, "http://localhost:3000?key=val"))
+	assert.True(t, IsCurrentKmupSiteURL(ctx, "http://localhost:3326?key=val"))
 
 	ctx = context.WithValue(ctx, RequestContextKey, &http.Request{
 		Host: "user-host",
@@ -169,26 +169,26 @@ func TestIsCurrentKmupSiteURL(t *testing.T) {
 			"X-Forwarded-Proto": {"https"},
 		},
 	})
-	assert.True(t, IsCurrentKmupSiteURL(ctx, "http://localhost:3000"))
+	assert.True(t, IsCurrentKmupSiteURL(ctx, "http://localhost:3326"))
 	assert.True(t, IsCurrentKmupSiteURL(ctx, "https://user-host"))
 	assert.False(t, IsCurrentKmupSiteURL(ctx, "https://forwarded-host"))
 }
 
 func TestParseKmupSiteURL(t *testing.T) {
-	defer test.MockVariableValue(&setting.AppURL, "http://localhost:3000/sub/")()
+	defer test.MockVariableValue(&setting.AppURL, "http://localhost:3326/sub/")()
 	defer test.MockVariableValue(&setting.AppSubURL, "/sub")()
 	ctx := t.Context()
 	tests := []struct {
 		url string
 		exp *KmupSiteURL
 	}{
-		{"http://localhost:3000/sub?k=v", &KmupSiteURL{RoutePath: ""}},
-		{"http://localhost:3000/sub/", &KmupSiteURL{RoutePath: ""}},
-		{"http://localhost:3000/sub/foo", &KmupSiteURL{RoutePath: "/foo"}},
-		{"http://localhost:3000/sub/foo/bar", &KmupSiteURL{RoutePath: "/foo/bar", OwnerName: "foo", RepoName: "bar"}},
-		{"http://localhost:3000/sub/foo/bar/", &KmupSiteURL{RoutePath: "/foo/bar", OwnerName: "foo", RepoName: "bar"}},
-		{"http://localhost:3000/sub/attachments/bar", &KmupSiteURL{RoutePath: "/attachments/bar"}},
-		{"http://localhost:3000/other", nil},
+		{"http://localhost:3326/sub?k=v", &KmupSiteURL{RoutePath: ""}},
+		{"http://localhost:3326/sub/", &KmupSiteURL{RoutePath: ""}},
+		{"http://localhost:3326/sub/foo", &KmupSiteURL{RoutePath: "/foo"}},
+		{"http://localhost:3326/sub/foo/bar", &KmupSiteURL{RoutePath: "/foo/bar", OwnerName: "foo", RepoName: "bar"}},
+		{"http://localhost:3326/sub/foo/bar/", &KmupSiteURL{RoutePath: "/foo/bar", OwnerName: "foo", RepoName: "bar"}},
+		{"http://localhost:3326/sub/attachments/bar", &KmupSiteURL{RoutePath: "/attachments/bar"}},
+		{"http://localhost:3326/other", nil},
 		{"http://other/", nil},
 	}
 	for _, test := range tests {

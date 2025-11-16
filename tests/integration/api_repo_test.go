@@ -394,7 +394,7 @@ func TestAPIRepoMigrate(t *testing.T) {
 		{ctxUserID: 2, userID: 1, cloneURL: "https://github.com/go-kmup/test_repo.git", repoName: "git-bad", expectedStatus: http.StatusForbidden},
 		{ctxUserID: 2, userID: 3, cloneURL: "https://github.com/go-kmup/test_repo.git", repoName: "git-org", expectedStatus: http.StatusCreated},
 		{ctxUserID: 2, userID: 6, cloneURL: "https://github.com/go-kmup/test_repo.git", repoName: "git-bad-org", expectedStatus: http.StatusForbidden},
-		{ctxUserID: 2, userID: 3, cloneURL: "https://localhost:3000/user/test_repo.git", repoName: "private-ip", expectedStatus: http.StatusUnprocessableEntity},
+		{ctxUserID: 2, userID: 3, cloneURL: "https://localhost:3326/user/test_repo.git", repoName: "private-ip", expectedStatus: http.StatusUnprocessableEntity},
 		{ctxUserID: 2, userID: 3, cloneURL: "https://10.0.0.1/user/test_repo.git", repoName: "private-ip", expectedStatus: http.StatusUnprocessableEntity},
 	}
 

@@ -12,7 +12,7 @@ tasks:
       gp sync-await setup
 
       # Get the URL and extract the domain
-      url=$(gp url 3000)
+      url=$(gp url 3326)
       domain=$(echo $url | awk -F[/:] '{print $4}')
 
       if [ -f custom/conf/app.ini ]; then
@@ -48,4 +48,4 @@ vscode:
 
 ports:
   - name: Kmup
-    port: 3000
+    port: 3326

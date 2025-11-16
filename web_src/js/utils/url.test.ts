@@ -7,7 +7,7 @@ test('pathEscapeSegments', () => {
 
 test('toOriginUrl', () => {
   const oldLocation = String(window.location);
-  for (const origin of ['https://example.com', 'https://example.com:3000']) {
+  for (const origin of ['https://example.com', 'https://example.com:3326']) {
     window.location.assign(`${origin}/`);
     expect(toOriginUrl('/')).toEqual(`${origin}/`);
     expect(toOriginUrl('/org/repo.git')).toEqual(`${origin}/org/repo.git`);

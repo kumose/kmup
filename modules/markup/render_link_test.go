@@ -27,12 +27,12 @@ import (
 
 func TestResolveLinkRelative(t *testing.T) {
 	ctx := t.Context()
-	setting.AppURL = "http://localhost:3000"
+	setting.AppURL = "http://localhost:3326"
 	assert.Equal(t, "/a", resolveLinkRelative(ctx, "/a", "", "", false))
 	assert.Equal(t, "/a/b", resolveLinkRelative(ctx, "/a", "b", "", false))
 	assert.Equal(t, "/a/b/c", resolveLinkRelative(ctx, "/a", "b", "c", false))
 	assert.Equal(t, "/a/c", resolveLinkRelative(ctx, "/a", "b", "/c", false))
-	assert.Equal(t, "http://localhost:3000/a", resolveLinkRelative(ctx, "/a", "", "", true))
+	assert.Equal(t, "http://localhost:3326/a", resolveLinkRelative(ctx, "/a", "", "", true))
 
 	// some users might have used absolute paths a lot, so if the prefix overlaps and has enough slashes, we should tolerate it
 	assert.Equal(t, "/owner/repo/foo/owner/repo/foo/bar/xxx", resolveLinkRelative(ctx, "/owner/repo/foo", "", "/owner/repo/foo/bar/xxx", false))

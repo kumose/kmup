@@ -41,14 +41,14 @@ func TestRemoveSessionCookieHeader(t *testing.T) {
 
 func TestRedirectToCurrentSite(t *testing.T) {
 	setting.IsInTesting = true
-	defer test.MockVariableValue(&setting.AppURL, "http://localhost:3000/sub/")()
+	defer test.MockVariableValue(&setting.AppURL, "http://localhost:3326/sub/")()
 	defer test.MockVariableValue(&setting.AppSubURL, "/sub")()
 	cases := []struct {
 		location string
 		want     string
 	}{
 		{"/", "/sub/"},
-		{"http://localhost:3000/sub?k=v", "http://localhost:3000/sub?k=v"},
+		{"http://localhost:3326/sub?k=v", "http://localhost:3326/sub?k=v"},
 		{"http://other", "/sub/"},
 	}
 	for _, c := range cases {

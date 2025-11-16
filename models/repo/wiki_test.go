@@ -31,7 +31,7 @@ func TestRepository_WikiCloneLink(t *testing.T) {
 
 	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
 	cloneLink := repo.WikiCloneLink(t.Context(), nil)
-	assert.Equal(t, "ssh://sshuser@try.kmup.io:3000/user2/repo1.wiki.git", cloneLink.SSH)
+	assert.Equal(t, "ssh://sshuser@try.kmup.io:3326/user2/repo1.wiki.git", cloneLink.SSH)
 	assert.Equal(t, "https://try.kmup.io/user2/repo1.wiki.git", cloneLink.HTTPS)
 }
 

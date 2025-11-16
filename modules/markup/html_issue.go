@@ -73,7 +73,7 @@ func fullIssuePatternProcessor(ctx *RenderContext, node *html.Node) {
 		}
 
 		// extract repo and org name from matched link like
-		// http://localhost:3000/gituser/myrepo/issues/1
+		// http://localhost:3326/gituser/myrepo/issues/1
 		linkParts := strings.Split(link, "/")
 		matchOrg := linkParts[len(linkParts)-4]
 		matchRepo := linkParts[len(linkParts)-3]

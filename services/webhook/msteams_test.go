@@ -54,7 +54,7 @@ func TestMSTeamsPayload(t *testing.T) {
 		}
 		assert.Len(t, pl.PotentialAction, 1)
 		assert.Len(t, pl.PotentialAction[0].Targets, 1)
-		assert.Equal(t, "http://localhost:3000/test/repo/src/test", pl.PotentialAction[0].Targets[0].URI)
+		assert.Equal(t, "http://localhost:3326/test/repo/src/test", pl.PotentialAction[0].Targets[0].URI)
 	})
 
 	t.Run("Delete", func(t *testing.T) {
@@ -80,7 +80,7 @@ func TestMSTeamsPayload(t *testing.T) {
 		}
 		assert.Len(t, pl.PotentialAction, 1)
 		assert.Len(t, pl.PotentialAction[0].Targets, 1)
-		assert.Equal(t, "http://localhost:3000/test/repo/src/test", pl.PotentialAction[0].Targets[0].URI)
+		assert.Equal(t, "http://localhost:3326/test/repo/src/test", pl.PotentialAction[0].Targets[0].URI)
 	})
 
 	t.Run("Fork", func(t *testing.T) {
@@ -106,7 +106,7 @@ func TestMSTeamsPayload(t *testing.T) {
 		}
 		assert.Len(t, pl.PotentialAction, 1)
 		assert.Len(t, pl.PotentialAction[0].Targets, 1)
-		assert.Equal(t, "http://localhost:3000/test/repo", pl.PotentialAction[0].Targets[0].URI)
+		assert.Equal(t, "http://localhost:3326/test/repo", pl.PotentialAction[0].Targets[0].URI)
 	})
 
 	t.Run("Push", func(t *testing.T) {
@@ -119,7 +119,7 @@ func TestMSTeamsPayload(t *testing.T) {
 		assert.Equal(t, "[test/repo:test] 2 new commits", pl.Summary)
 		assert.Len(t, pl.Sections, 1)
 		assert.Equal(t, "user1", pl.Sections[0].ActivitySubtitle)
-		assert.Equal(t, "[2020558](http://localhost:3000/test/repo/commit/2020558fe2e34debb818a514715839cabd25e778) commit message - user1\n\n[2020558](http://localhost:3000/test/repo/commit/2020558fe2e34debb818a514715839cabd25e778) commit message - user1", pl.Sections[0].Text)
+		assert.Equal(t, "[2020558](http://localhost:3326/test/repo/commit/2020558fe2e34debb818a514715839cabd25e778) commit message - user1\n\n[2020558](http://localhost:3326/test/repo/commit/2020558fe2e34debb818a514715839cabd25e778) commit message - user1", pl.Sections[0].Text)
 		assert.Len(t, pl.Sections[0].Facts, 2)
 		for _, fact := range pl.Sections[0].Facts {
 			if fact.Name == "Repository:" {
@@ -132,7 +132,7 @@ func TestMSTeamsPayload(t *testing.T) {
 		}
 		assert.Len(t, pl.PotentialAction, 1)
 		assert.Len(t, pl.PotentialAction[0].Targets, 1)
-		assert.Equal(t, "http://localhost:3000/test/repo/src/test", pl.PotentialAction[0].Targets[0].URI)
+		assert.Equal(t, "http://localhost:3326/test/repo/src/test", pl.PotentialAction[0].Targets[0].URI)
 	})
 
 	t.Run("Issue", func(t *testing.T) {
@@ -159,7 +159,7 @@ func TestMSTeamsPayload(t *testing.T) {
 		}
 		assert.Len(t, pl.PotentialAction, 1)
 		assert.Len(t, pl.PotentialAction[0].Targets, 1)
-		assert.Equal(t, "http://localhost:3000/test/repo/issues/2", pl.PotentialAction[0].Targets[0].URI)
+		assert.Equal(t, "http://localhost:3326/test/repo/issues/2", pl.PotentialAction[0].Targets[0].URI)
 
 		p.Action = api.HookIssueClosed
 		pl, err = mc.Issue(p)
@@ -182,7 +182,7 @@ func TestMSTeamsPayload(t *testing.T) {
 		}
 		assert.Len(t, pl.PotentialAction, 1)
 		assert.Len(t, pl.PotentialAction[0].Targets, 1)
-		assert.Equal(t, "http://localhost:3000/test/repo/issues/2", pl.PotentialAction[0].Targets[0].URI)
+		assert.Equal(t, "http://localhost:3326/test/repo/issues/2", pl.PotentialAction[0].Targets[0].URI)
 	})
 
 	t.Run("IssueComment", func(t *testing.T) {
@@ -208,7 +208,7 @@ func TestMSTeamsPayload(t *testing.T) {
 		}
 		assert.Len(t, pl.PotentialAction, 1)
 		assert.Len(t, pl.PotentialAction[0].Targets, 1)
-		assert.Equal(t, "http://localhost:3000/test/repo/issues/2#issuecomment-4", pl.PotentialAction[0].Targets[0].URI)
+		assert.Equal(t, "http://localhost:3326/test/repo/issues/2#issuecomment-4", pl.PotentialAction[0].Targets[0].URI)
 	})
 
 	t.Run("PullRequest", func(t *testing.T) {
@@ -234,7 +234,7 @@ func TestMSTeamsPayload(t *testing.T) {
 		}
 		assert.Len(t, pl.PotentialAction, 1)
 		assert.Len(t, pl.PotentialAction[0].Targets, 1)
-		assert.Equal(t, "http://localhost:3000/test/repo/pulls/12", pl.PotentialAction[0].Targets[0].URI)
+		assert.Equal(t, "http://localhost:3326/test/repo/pulls/12", pl.PotentialAction[0].Targets[0].URI)
 	})
 
 	t.Run("PullRequestComment", func(t *testing.T) {
@@ -260,7 +260,7 @@ func TestMSTeamsPayload(t *testing.T) {
 		}
 		assert.Len(t, pl.PotentialAction, 1)
 		assert.Len(t, pl.PotentialAction[0].Targets, 1)
-		assert.Equal(t, "http://localhost:3000/test/repo/pulls/12#issuecomment-4", pl.PotentialAction[0].Targets[0].URI)
+		assert.Equal(t, "http://localhost:3326/test/repo/pulls/12#issuecomment-4", pl.PotentialAction[0].Targets[0].URI)
 	})
 
 	t.Run("Review", func(t *testing.T) {
@@ -287,7 +287,7 @@ func TestMSTeamsPayload(t *testing.T) {
 		}
 		assert.Len(t, pl.PotentialAction, 1)
 		assert.Len(t, pl.PotentialAction[0].Targets, 1)
-		assert.Equal(t, "http://localhost:3000/test/repo/pulls/12", pl.PotentialAction[0].Targets[0].URI)
+		assert.Equal(t, "http://localhost:3326/test/repo/pulls/12", pl.PotentialAction[0].Targets[0].URI)
 	})
 
 	t.Run("Repository", func(t *testing.T) {
@@ -311,7 +311,7 @@ func TestMSTeamsPayload(t *testing.T) {
 		}
 		assert.Len(t, pl.PotentialAction, 1)
 		assert.Len(t, pl.PotentialAction[0].Targets, 1)
-		assert.Equal(t, "http://localhost:3000/test/repo", pl.PotentialAction[0].Targets[0].URI)
+		assert.Equal(t, "http://localhost:3326/test/repo", pl.PotentialAction[0].Targets[0].URI)
 	})
 
 	t.Run("Package", func(t *testing.T) {
@@ -335,7 +335,7 @@ func TestMSTeamsPayload(t *testing.T) {
 		}
 		assert.Len(t, pl.PotentialAction, 1)
 		assert.Len(t, pl.PotentialAction[0].Targets, 1)
-		assert.Equal(t, "http://localhost:3000/user1/-/packages/container/KmupContainer/latest", pl.PotentialAction[0].Targets[0].URI)
+		assert.Equal(t, "http://localhost:3326/user1/-/packages/container/KmupContainer/latest", pl.PotentialAction[0].Targets[0].URI)
 	})
 
 	t.Run("Wiki", func(t *testing.T) {
@@ -360,7 +360,7 @@ func TestMSTeamsPayload(t *testing.T) {
 		}
 		assert.Len(t, pl.PotentialAction, 1)
 		assert.Len(t, pl.PotentialAction[0].Targets, 1)
-		assert.Equal(t, "http://localhost:3000/test/repo/wiki/index", pl.PotentialAction[0].Targets[0].URI)
+		assert.Equal(t, "http://localhost:3326/test/repo/wiki/index", pl.PotentialAction[0].Targets[0].URI)
 
 		p.Action = api.HookWikiEdited
 		pl, err = mc.Wiki(p)
@@ -381,7 +381,7 @@ func TestMSTeamsPayload(t *testing.T) {
 		}
 		assert.Len(t, pl.PotentialAction, 1)
 		assert.Len(t, pl.PotentialAction[0].Targets, 1)
-		assert.Equal(t, "http://localhost:3000/test/repo/wiki/index", pl.PotentialAction[0].Targets[0].URI)
+		assert.Equal(t, "http://localhost:3326/test/repo/wiki/index", pl.PotentialAction[0].Targets[0].URI)
 
 		p.Action = api.HookWikiDeleted
 		pl, err = mc.Wiki(p)
@@ -402,7 +402,7 @@ func TestMSTeamsPayload(t *testing.T) {
 		}
 		assert.Len(t, pl.PotentialAction, 1)
 		assert.Len(t, pl.PotentialAction[0].Targets, 1)
-		assert.Equal(t, "http://localhost:3000/test/repo/wiki/index", pl.PotentialAction[0].Targets[0].URI)
+		assert.Equal(t, "http://localhost:3326/test/repo/wiki/index", pl.PotentialAction[0].Targets[0].URI)
 	})
 
 	t.Run("Release", func(t *testing.T) {
@@ -428,7 +428,7 @@ func TestMSTeamsPayload(t *testing.T) {
 		}
 		assert.Len(t, pl.PotentialAction, 1)
 		assert.Len(t, pl.PotentialAction[0].Targets, 1)
-		assert.Equal(t, "http://localhost:3000/test/repo/releases/tag/v1.0", pl.PotentialAction[0].Targets[0].URI)
+		assert.Equal(t, "http://localhost:3326/test/repo/releases/tag/v1.0", pl.PotentialAction[0].Targets[0].URI)
 	})
 }
 

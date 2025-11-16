@@ -1,7 +1,7 @@
 window.__webpack_public_path__ = '';
 
 window.config = {
-  appUrl: 'http://localhost:3000/',
+  appUrl: 'http://localhost:3326/',
   appSubUrl: '',
   assetVersionEncoded: '',
   assetUrlPrefix: '',

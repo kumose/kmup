@@ -79,10 +79,10 @@ func GuessCurrentHostURL(ctx context.Context) string {
 	// At the moment, if site admin doesn't configure the proxy headers correctly, then Kmup would guess wrong.
 	// There are some cases:
 	// 1. The reverse proxy is configured correctly, it passes "X-Forwarded-Proto/Host" headers. Perfect, Kmup can handle it correctly.
-	// 2. The reverse proxy is not configured correctly, doesn't pass "X-Forwarded-Proto/Host" headers, eg: only one "proxy_pass http://kmup:3000" in Nginx.
+	// 2. The reverse proxy is not configured correctly, doesn't pass "X-Forwarded-Proto/Host" headers, eg: only one "proxy_pass http://kmup:3326" in Nginx.
 	// 3. There is no reverse proxy.
 	// Without more information, Kmup is impossible to distinguish between case 2 and case 3, then case 2 would result in
-	// wrong guess like guessed public URL becomes "http://kmup:3000/" behind a "https" reverse proxy, which is not accessible by end users.
+	// wrong guess like guessed public URL becomes "http://kmup:3326/" behind a "https" reverse proxy, which is not accessible by end users.
 	// So we introduced "PUBLIC_URL_DETECTION" option, to control the guessing behavior to satisfy different use cases.
 	req, ok := ctx.Value(RequestContextKey).(*http.Request)
 	if !ok {

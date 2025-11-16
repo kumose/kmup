@@ -186,7 +186,7 @@ func TestParseGitURLs(t *testing.T) {
 }
 
 func TestParseRepositoryURL(t *testing.T) {
-	defer test.MockVariableValue(&setting.AppURL, "https://localhost:3000")()
+	defer test.MockVariableValue(&setting.AppURL, "https://localhost:3326")()
 	defer test.MockVariableValue(&setting.SSH.Domain, "try.kmup.io")()
 
 	ctxURL, _ := url.Parse("https://kmup")
@@ -200,10 +200,10 @@ func TestParseRepositoryURL(t *testing.T) {
 	}{
 		{input: "/user/repo"},
 
-		{input: "https://localhost:3000/user/repo", ownerName: "user", repoName: "repo"},
-		{input: "https://external:3000/user/repo"},
+		{input: "https://localhost:3326/user/repo", ownerName: "user", repoName: "repo"},
+		{input: "https://external:3326/user/repo"},
 
-		{input: "https://localhost:3000/user/repo.git/other", ownerName: "user", repoName: "repo", remaining: "/other"},
+		{input: "https://localhost:3326/user/repo.git/other", ownerName: "user", repoName: "repo", remaining: "/other"},
 
 		{input: "https://kmup/user/repo", ownerName: "user", repoName: "repo"},
 		{input: "https://kmup:3333/user/repo"},
@@ -229,14 +229,14 @@ func TestParseRepositoryURL(t *testing.T) {
 	}
 
 	t.Run("WithSubpath", func(t *testing.T) {
-		defer test.MockVariableValue(&setting.AppURL, "https://localhost:3000/subpath")()
+		defer test.MockVariableValue(&setting.AppURL, "https://localhost:3326/subpath")()
 		defer test.MockVariableValue(&setting.AppSubURL, "/subpath")()
 		cases = []struct {
 			input                          string
 			ownerName, repoName, remaining string
 		}{
-			{input: "https://localhost:3000/user/repo"},
-			{input: "https://localhost:3000/subpath/user/repo.git/other", ownerName: "user", repoName: "repo", remaining: "/other"},
+			{input: "https://localhost:3326/user/repo"},
+			{input: "https://localhost:3326/subpath/user/repo.git/other", ownerName: "user", repoName: "repo", remaining: "/other"},
 
 			{input: "ssh://try.kmup.io:2222/user/repo", ownerName: "user", repoName: "repo"},
 			{input: "ssh://external:2222/user/repo"},
@@ -260,10 +260,10 @@ func TestParseRepositoryURL(t *testing.T) {
 }
 
 func TestMakeRepositoryBaseLink(t *testing.T) {
-	defer test.MockVariableValue(&setting.AppURL, "https://localhost:3000/subpath")()
+	defer test.MockVariableValue(&setting.AppURL, "https://localhost:3326/subpath")()
 	defer test.MockVariableValue(&setting.AppSubURL, "/subpath")()
 
-	u, err := ParseRepositoryURL(t.Context(), "https://localhost:3000/subpath/user/repo.git")
+	u, err := ParseRepositoryURL(t.Context(), "https://localhost:3326/subpath/user/repo.git")
 	assert.NoError(t, err)
 	assert.Equal(t, "/subpath/user/repo", MakeRepositoryWebLink(u))
 

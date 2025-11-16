@@ -146,15 +146,15 @@ func TestWebhookDeliverHookTask(t *testing.T) {
 
 	done := make(chan struct{}, 1)
 	version2Body := `{
-  "body": "[[test/repo](http://localhost:3000/test/repo)] user1 pushed 2 commits to [test](http://localhost:3000/test/repo/src/branch/test):\n[2020558](http://localhost:3000/test/repo/commit/2020558fe2e34debb818a514715839cabd25e778): commit message - user1\n[2020558](http://localhost:3000/test/repo/commit/2020558fe2e34debb818a514715839cabd25e778): commit message - user1",
+  "body": "[[test/repo](http://localhost:3326/test/repo)] user1 pushed 2 commits to [test](http://localhost:3326/test/repo/src/branch/test):\n[2020558](http://localhost:3326/test/repo/commit/2020558fe2e34debb818a514715839cabd25e778): commit message - user1\n[2020558](http://localhost:3326/test/repo/commit/2020558fe2e34debb818a514715839cabd25e778): commit message - user1",
   "msgtype": "",
   "format": "org.matrix.custom.html",
-  "formatted_body": "[<a href=\"http://localhost:3000/test/repo\">test/repo</a>] user1 pushed 2 commits to <a href=\"http://localhost:3000/test/repo/src/branch/test\">test</a>:<br><a href=\"http://localhost:3000/test/repo/commit/2020558fe2e34debb818a514715839cabd25e778\">2020558</a>: commit message - user1<br><a href=\"http://localhost:3000/test/repo/commit/2020558fe2e34debb818a514715839cabd25e778\">2020558</a>: commit message - user1",
+  "formatted_body": "[<a href=\"http://localhost:3326/test/repo\">test/repo</a>] user1 pushed 2 commits to <a href=\"http://localhost:3326/test/repo/src/branch/test\">test</a>:<br><a href=\"http://localhost:3326/test/repo/commit/2020558fe2e34debb818a514715839cabd25e778\">2020558</a>: commit message - user1<br><a href=\"http://localhost:3326/test/repo/commit/2020558fe2e34debb818a514715839cabd25e778\">2020558</a>: commit message - user1",
   "io.kmup.commits": [
     {
       "id": "2020558fe2e34debb818a514715839cabd25e778",
       "message": "commit message",
-      "url": "http://localhost:3000/test/repo/commit/2020558fe2e34debb818a514715839cabd25e778",
+      "url": "http://localhost:3326/test/repo/commit/2020558fe2e34debb818a514715839cabd25e778",
       "author": {
         "name": "user1",
         "email": "user1@localhost",
@@ -174,7 +174,7 @@ func TestWebhookDeliverHookTask(t *testing.T) {
     {
       "id": "2020558fe2e34debb818a514715839cabd25e778",
       "message": "commit message",
-      "url": "http://localhost:3000/test/repo/commit/2020558fe2e34debb818a514715839cabd25e778",
+      "url": "http://localhost:3326/test/repo/commit/2020558fe2e34debb818a514715839cabd25e778",
       "author": {
         "name": "user1",
         "email": "user1@localhost",

@@ -44,7 +44,7 @@ func Test_ValidURLValidation(t *testing.T) {
 		{
 			description: "URL with port",
 			data: TestForm{
-				URL: "http://test.lan:3000/",
+				URL: "http://test.lan:3326/",
 			},
 			expectedErrors: binding.Errors{},
 		},
@@ -58,7 +58,7 @@ func Test_ValidURLValidation(t *testing.T) {
 		{
 			description: "URL with IPv6 address with port",
 			data: TestForm{
-				URL: "http://[::1]:3000/",
+				URL: "http://[::1]:3326/",
 			},
 			expectedErrors: binding.Errors{},
 		},

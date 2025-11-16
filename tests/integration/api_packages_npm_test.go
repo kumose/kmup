@@ -52,7 +52,7 @@ func TestPackageNpm(t *testing.T) {
 	packageBinName := "cli"
 	packageBinPath := "./cli.sh"
 	repoType := "kmup"
-	repoURL := "http://localhost:3000/kmup/test.git"
+	repoURL := "http://localhost:3326/kmup/test.git"
 
 	data := "H4sIAAAAAAAA/ytITM5OTE/VL4DQelnF+XkMVAYGBgZmJiYK2MRBwNDcSIHB2NTMwNDQzMwAqA7IMDUxA9LUdgg2UFpcklgEdAql5kD8ogCnhwio5lJQUMpLzE1VslJQcihOzi9I1S9JLS7RhSYIJR2QgrLUouLM/DyQGkM9Az1D3YIiqExKanFyUWZBCVQ2BKhVwQVJDKwosbQkI78IJO/tZ+LsbRykxFXLNdA+HwWjYBSMgpENACgAbtAACAAA"
 
