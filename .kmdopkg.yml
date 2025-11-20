@@ -1,0 +1,27 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - pnpm install --frozen-lockfile
+
+builds: []
+
+artifacts:
+  - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    path: "dist/release/{{ .ProjectName }}-{{ .Version }}-*{{ .Os }}*{{ .Arch }}*"
+    format: binary
+
+releases:
+  - github:
+      owner: kumose
+      repo: kmup
+    draft: false
+    prerelease: false
+    generate_release_notes: true
+
+archives: []
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
