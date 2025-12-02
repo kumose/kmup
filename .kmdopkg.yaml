@@ -17,8 +17,8 @@ archives:
   - name_template: "{{ .ProjectName }}-{{ .Version }}-any-any"
     formats: [tar.gz]
     files:
-      - src: "bin"
-        dst: bin
+      - src: "kmup"
+        dst: kmup
 
 checksum:
   name_template: "checksums.txt"
