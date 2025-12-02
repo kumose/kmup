@@ -1,0 +1,48 @@
+# This is an example .kmdopkg.yml file with some sensible defaults.
+# Make sure to check the documentation at https://kumose.cc
+
+# The lines below are called `modelines`. See `:help modeline`
+# Feel free to remove those if you don't want/need to use them.
+# yaml-language-server: $schema=https://kumose.cc/static/schema.json
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj
+
+version: 2
+
+builds:
+  - builder: script
+  
+archives:
+  - name_template: "{{ .ProjectName }}-{{ .Version }}-any-any"
+    formats: [tar.gz]
+    files:
+      - src: "bin"
+        dst: bin
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  use: github
+  format: "{{ .SHA }}: {{ .Message }}{{ with .AuthorUsername }} (@{{ . }}){{ end }}"
+  filters:
+    exclude:
+      - "^test:"
+      - "^docs:"
+      - "^ci:"
+      - "merge"
+
+release:
+  github:
+    owner: kumose
+    name: kmup
+  draft: false
+  prerelease: false
+  make_latest: true
+  name_template: "v{{ .Version }}"
+  header: |
+    ## Project Template v{{ .Version }} Released 🚀
+    - Type: Pure file release
+    - Contents: template/, README.md, LICENSE
+  footer: |
+    Released by kmdo pkg.
