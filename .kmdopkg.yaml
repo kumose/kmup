@@ -13,7 +13,7 @@ builds:
 
   
 archives:
-  - name_template: "{{ .ProjectName }}-{{ .Version }}-any-any"
+  - name_template: "{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
     formats: [tar.gz]
     files:
       - kmup
