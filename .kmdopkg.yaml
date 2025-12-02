@@ -9,7 +9,8 @@
 version: 2
 
 builds:
-  - builder: noop
+  - builder: script
+    tool: kmdobuild.sh
 
   
 archives:
