@@ -17,8 +17,7 @@ archives:
   - name_template: "{{ .ProjectName }}-{{ .Version }}-any-any"
     formats: [tar.gz]
     files:
-      - src: "bin"
-        dst: bin
+      - bin/*
 
 checksum:
   name_template: "checksums.txt"
