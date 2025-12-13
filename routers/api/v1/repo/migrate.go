@@ -223,7 +223,7 @@ func Migrate(ctx *context.APIContext) {
 	}
 
 	// use a background context, don't cancel the migration even if the client goes away
-	// HammerContext doesn't seem right (from https://github.com/go-kmup/kmup/pull/9335/files)
+	// HammerContext doesn't seem right (from https://github.com/kumose/kmup/pull/9335/files)
 	// There are other abuses, maybe most HammerContext abuses should be fixed together in the future.
 	migratedRepo, err := doLongTimeMigrate(graceful.GetManager().HammerContext(), ctx.Doer)
 	if err != nil {

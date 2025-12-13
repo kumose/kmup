@@ -1,6 +1,6 @@
 [program:kmup]
-directory=/home/git/go/src/github.com/go-kmup/kmup/
-command=/home/git/go/src/github.com/go-kmup/kmup/kmup web
+directory=/home/git/go/src/github.com/kumose/kmup/
+command=/home/git/go/src/github.com/kumose/kmup/kmup web
 autostart=true
 autorestart=true
 startsecs=10

@@ -97,17 +97,17 @@ func TestRender_CrossReferences(t *testing.T) {
 		"test-owner/test-repo#12345",
 		`<p><a href="/test-owner/test-repo/issues/12345" class="ref-issue" rel="nofollow">test-owner/test-repo#12345</a></p>`)
 	test(
-		"go-kmup/kmup#12345",
-		`<p><a href="/go-kmup/kmup/issues/12345" class="ref-issue" rel="nofollow">go-kmup/kmup#12345</a></p>`)
+		"kumose/kmup#12345",
+		`<p><a href="/kumose/kmup/issues/12345" class="ref-issue" rel="nofollow">kumose/kmup#12345</a></p>`)
 	test(
-		"/home/kmup/go-kmup/kmup#12345",
-		`<p>/home/kmup/go-kmup/kmup#12345</p>`)
+		"/home/kmup/kumose/kmup#12345",
+		`<p>/home/kmup/kumose/kmup#12345</p>`)
 	test(
 		util.URLJoin(markup.TestAppURL, "gokmup", "kmup", "issues", "12345"),
 		`<p><a href="`+util.URLJoin(markup.TestAppURL, "gokmup", "kmup", "issues", "12345")+`" class="ref-issue" rel="nofollow">gokmup/kmup#12345</a></p>`)
 	test(
 		util.URLJoin(markup.TestAppURL, "go-kmup", "kmup", "issues", "12345"),
-		`<p><a href="`+util.URLJoin(markup.TestAppURL, "go-kmup", "kmup", "issues", "12345")+`" class="ref-issue" rel="nofollow">go-kmup/kmup#12345</a></p>`)
+		`<p><a href="`+util.URLJoin(markup.TestAppURL, "go-kmup", "kmup", "issues", "12345")+`" class="ref-issue" rel="nofollow">kumose/kmup#12345</a></p>`)
 	test(
 		util.URLJoin(markup.TestAppURL, "gokmup", "some-repo-name", "issues", "12345"),
 		`<p><a href="`+util.URLJoin(markup.TestAppURL, "gokmup", "some-repo-name", "issues", "12345")+`" class="ref-issue" rel="nofollow">gokmup/some-repo-name#12345</a></p>`)
@@ -166,8 +166,8 @@ func TestRender_links(t *testing.T) {
 		"http://142.42.1.1/",
 		`<p><a href="http://142.42.1.1/" rel="nofollow">http://142.42.1.1/</a></p>`)
 	test(
-		"https://github.com/go-kmup/kmup/?p=aaa/bbb.html#ccc-ddd",
-		`<p><a href="https://github.com/go-kmup/kmup/?p=aaa/bbb.html#ccc-ddd" rel="nofollow">https://github.com/go-kmup/kmup/?p=aaa/bbb.html#ccc-ddd</a></p>`)
+		"https://github.com/kumose/kmup/?p=aaa/bbb.html#ccc-ddd",
+		`<p><a href="https://github.com/kumose/kmup/?p=aaa/bbb.html#ccc-ddd" rel="nofollow">https://github.com/kumose/kmup/?p=aaa/bbb.html#ccc-ddd</a></p>`)
 	test(
 		"https://en.wikipedia.org/wiki/URL_(disambiguation)",
 		`<p><a href="https://en.wikipedia.org/wiki/URL_(disambiguation)" rel="nofollow">https://en.wikipedia.org/wiki/URL_(disambiguation)</a></p>`)
@@ -285,8 +285,8 @@ func TestRender_email(t *testing.T) {
 		"/home/kmup/mailstore/info@kmup/com",
 		`<p>/home/kmup/mailstore/info@kmup/com</p>`)
 	test(
-		"git@try.kmup.io:go-kmup/kmup.git",
-		`<p>git@try.kmup.io:go-kmup/kmup.git</p>`)
+		"git@try.kmup.io:kumose/kmup.git",
+		`<p>git@try.kmup.io:kumose/kmup.git</p>`)
 	test(
 		"https://foo:bar@kmup.io",
 		`<p><a href="https://foo:bar@kmup.io" rel="nofollow">https://foo:bar@kmup.io</a></p>`)
@@ -518,8 +518,8 @@ func TestPostProcess(t *testing.T) {
 
 	// But cross-referenced issue index should work.
 	test(
-		"go-kmup/kmup#12345",
-		`<a href="/go-kmup/kmup/issues/12345" class="ref-issue">go-kmup/kmup#12345</a>`)
+		"kumose/kmup#12345",
+		`<a href="/kumose/kmup/issues/12345" class="ref-issue">kumose/kmup#12345</a>`)
 
 	// Test that other post-processing still works.
 	test(

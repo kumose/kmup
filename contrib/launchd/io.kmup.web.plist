@@ -14,7 +14,7 @@
 		<array>
 			<!-- assumes Kmup is installed in /Users/git/kmup -->
 			<!-- modify below to reflect your settings -->
-			<string>/Users/git/kmup/kmup</string>
+			<string>/Users/git/kumose/kmup</string>
 			<string>web</string>
 		</array>
 		<key>RunAtLoad</key>

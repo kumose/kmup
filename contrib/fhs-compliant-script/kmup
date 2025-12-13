@@ -8,7 +8,7 @@
 #
 # And place the original in /usr/lib/kmup with working files in /var/lib/kmup
 # and main configuration in /etc/kmup/app.ini
-KMUP="/usr/lib/kmup/kmup"
+KMUP="/usr/lib/kumose/kmup"
 WORK_DIR="/var/lib/kmup"
 APP_INI="/etc/kmup/app.ini"
 

@@ -77,7 +77,7 @@ func NodeInfo(ctx *context.APIContext) {
 		Software: structs.NodeInfoSoftware{
 			Name:       "kmup",
 			Version:    setting.AppVer,
-			Repository: "https://github.com/go-kmup/kmup.git",
+			Repository: "https://github.com/kumose/kmup.git",
 			Homepage:   "https://kmup.io/",
 		},
 		Protocols: []string{"activitypub"},

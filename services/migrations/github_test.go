@@ -465,7 +465,7 @@ func TestGithubMultiToken(t *testing.T) {
 
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
-			opts := base.MigrateOptions{CloneAddr: "https://github.com/go-kmup/kmup", AuthToken: tC.token}
+			opts := base.MigrateOptions{CloneAddr: "https://github.com/kumose/kmup", AuthToken: tC.token}
 			client, err := factory.New(t.Context(), opts)
 			require.NoError(t, err)
 

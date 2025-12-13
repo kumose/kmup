@@ -312,7 +312,7 @@ func TestRender_AutoLink(t *testing.T) {
 	test(tmp, "<a href=\""+tmp+"\" class=\"commit\"><code>d8a994ef24 (diff-2)</code></a>")
 
 	// render other commit URLs
-	tmp = "https://external-link.kmup.io/go-kmup/kmup/commit/d8a994ef243349f321568f9e36d5c3f444b99cae#diff-2"
+	tmp = "https://external-link.kmup.io/kumose/kmup/commit/d8a994ef243349f321568f9e36d5c3f444b99cae#diff-2"
 	test(tmp, "<a href=\""+tmp+"\" class=\"commit\"><code>d8a994ef24 (diff-2)</code></a>")
 }
 

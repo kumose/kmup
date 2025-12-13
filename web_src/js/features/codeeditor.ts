@@ -85,7 +85,7 @@ function updateEditor(monaco: Monaco, editor: IStandaloneCodeEditor, filename: s
   // https://github.com/microsoft/monaco-editor/discussions/3751
 }
 
-// export editor for customization - https://github.com/go-kmup/kmup/issues/10409
+// export editor for customization - https://github.com/kumose/kmup/issues/10409
 function exportEditor(editor: IStandaloneCodeEditor): void {
   if (!window.codeEditors) window.codeEditors = [];
   if (!window.codeEditors.includes(editor)) window.codeEditors.push(editor);

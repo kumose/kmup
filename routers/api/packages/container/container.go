@@ -798,7 +798,7 @@ func GetTagsList(ctx *context.Context) {
 
 // FIXME: Workaround to be removed in v1.20.
 // Update maybe we should never really remote it, as long as there is legacy data?
-// https://github.com/go-kmup/kmup/issues/19586
+// https://github.com/kumose/kmup/issues/19586
 func workaroundGetContainerBlob(ctx *context.Context, opts *container_model.BlobSearchOptions) (*packages_model.PackageFileDescriptor, error) {
 	blob, err := container_model.GetContainerBlob(ctx, opts)
 	if err != nil {

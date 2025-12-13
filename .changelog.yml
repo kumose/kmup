@@ -1,5 +1,5 @@
 # The full repository name
-repo: go-kmup/kmup
+repo: kumose/kmup
 
 # Service type (kmup or github)
 service: github

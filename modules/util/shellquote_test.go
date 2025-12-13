@@ -35,8 +35,8 @@ func TestShellEscape(t *testing.T) {
 			"a/b/c/d",
 		}, {
 			"Prefixed tilde - with normal stuff - should not escape",
-			"~/src/go/kmup/kmup",
-			"~/src/go/kmup/kmup",
+			"~/src/go/kumose/kmup",
+			"~/src/go/kumose/kmup",
 		}, {
 			"Typical windows path with spaces - should get doublequote escaped",
 			`C:\Program Files\Kmup v1.13 - I like lots of spaces\kmup`,

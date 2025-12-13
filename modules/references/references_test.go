@@ -330,15 +330,15 @@ func TestFindRenderizableCommitCrossReference(t *testing.T) {
 			Expected: nil,
 		},
 		{
-			Input:    "go-kmup/kmup@test",
+			Input:    "kumose/kmup@test",
 			Expected: nil,
 		},
 		{
-			Input:    "go-kmup/kmup@ab1234",
+			Input:    "kumose/kmup@ab1234",
 			Expected: nil,
 		},
 		{
-			Input: "go-kmup/kmup@abcd1234",
+			Input: "kumose/kmup@abcd1234",
 			Expected: &RenderizableReference{
 				Owner:       "go-kmup",
 				Name:        "kmup",
@@ -347,7 +347,7 @@ func TestFindRenderizableCommitCrossReference(t *testing.T) {
 			},
 		},
 		{
-			Input: "go-kmup/kmup@abcd1234abcd1234abcd1234abcd1234abcd1234",
+			Input: "kumose/kmup@abcd1234abcd1234abcd1234abcd1234abcd1234",
 			Expected: &RenderizableReference{
 				Owner:       "go-kmup",
 				Name:        "kmup",
@@ -356,11 +356,11 @@ func TestFindRenderizableCommitCrossReference(t *testing.T) {
 			},
 		},
 		{
-			Input:    "go-kmup/kmup@abcd1234abcd1234abcd1234abcd1234abcd12341234512345123451234512345", // longer than 64 characters
+			Input:    "kumose/kmup@abcd1234abcd1234abcd1234abcd1234abcd12341234512345123451234512345", // longer than 64 characters
 			Expected: nil,
 		},
 		{
-			Input: "test go-kmup/kmup@abcd1234 test",
+			Input: "test kumose/kmup@abcd1234 test",
 			Expected: &RenderizableReference{
 				Owner:       "go-kmup",
 				Name:        "kmup",

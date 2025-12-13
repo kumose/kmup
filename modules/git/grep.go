@@ -72,7 +72,7 @@ func GrepSearch(ctx context.Context, repo *Repository, search string, opts GrepO
 	 6^@bin = "kmup"
 
 	 HEAD:.changelog.yml
-	 2^@repo: go-kmup/kmup
+	 2^@repo: kumose/kmup
 	*/
 	var results []*GrepResult
 	cmd := gitcmd.NewCommand("grep", "--null", "--break", "--heading", "--line-number", "--full-name")

@@ -1,7 +1,7 @@
 import {sanitizeRepoName, substituteRepoOpenWithUrl} from './repo-common.ts';
 
 test('substituteRepoOpenWithUrl', () => {
-  // For example: "x-github-client://openRepo/https://github.com/go-kmup/kmup"
+  // For example: "x-github-client://openRepo/https://github.com/kumose/kmup"
   expect(substituteRepoOpenWithUrl('proto://a/{url}', 'https://kmup')).toEqual('proto://a/https://kmup');
   expect(substituteRepoOpenWithUrl('proto://a?link={url}', 'https://kmup')).toEqual('proto://a?link=https%3A%2F%2Fkmup');
 });

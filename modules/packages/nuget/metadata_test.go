@@ -41,7 +41,7 @@ const (
 	projectURL               = "https://kmup.io"
 	readme                   = "Readme"
 	releaseNotes             = "Package Release Notes"
-	repositoryURL            = "https://kmup.io/kmup/kmup"
+	repositoryURL            = "https://github.com/kumose/kmup"
 	requireLicenseAcceptance = true
 	tags                     = "tag_1 tag_2 tag_3"
 	targetFramework          = ".NETStandard2.1"

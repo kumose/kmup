@@ -97,7 +97,7 @@ func HookPostReceive(ctx *kmup_context.PrivateContext) {
 				// put the master/main branch first
 				// FIXME: It doesn't always work, since the master/main branch may not be the first batch of updates.
 				//        If the user pushes many branches at once, the Git hook will call the internal API in batches, rather than all at once.
-				//        See https://github.com/go-kmup/kmup/blob/cb52b17f92e2d2293f7c003649743464492bca48/cmd/hook.go#L27
+				//        See https://github.com/kumose/kmup/blob/cb52b17f92e2d2293f7c003649743464492bca48/cmd/hook.go#L27
 				//        If the user executes `git push origin --all` and pushes more than 30 branches, the master/main may not be the default branch.
 				copy(updates[1:], updates)
 				updates[0] = option

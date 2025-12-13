@@ -1,0 +1,15 @@
+#!/bin/bash
+
+###############################################################
+# This script sets defaults for kmup to run in the container #
+###############################################################
+
+# It assumes that you place this script as kmup in /usr/local/bin
+#
+# And place the original in /usr/lib/kmup with working files in /data/kmup
+KMUP="/app/kumose/kmup"
+WORK_DIR="/data/kmup"
+CUSTOM_PATH="/data/kmup"
+
+# Provide docker defaults
+KMUP_WORK_DIR="${KMUP_WORK_DIR:-$WORK_DIR}" KMUP_CUSTOM="${KMUP_CUSTOM:-$CUSTOM_PATH}" exec -a "$0" "$KMUP" $CONF_ARG "$@"

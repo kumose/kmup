@@ -87,7 +87,7 @@ echo "Checking currently installed version..."
 current=$(kmupcmd --version | cut -d ' ' -f 3)
 [[ "$current" == "$kmupversion" ]] && echo "$current is already installed, stopping." && exit 0
 if [[ -z "${no_confirm:-}"  ]]; then
-  echo "Make sure to read the changelog first: https://github.com/go-kmup/kmup/blob/main/CHANGELOG.md"
+  echo "Make sure to read the changelog first: https://github.com/kumose/kmup/blob/main/CHANGELOG.md"
   echo "Are you ready to update Kmup from ${current} to ${kmupversion}? (y/N)"
   read -r confirm
   [[ "$confirm" == "y" ]] || [[ "$confirm" == "Y" ]] || exit 1

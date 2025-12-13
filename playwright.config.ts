@@ -61,7 +61,7 @@ export default {
       },
     },
 
-    // disabled because of https://github.com/go-kmup/kmup/issues/21355
+    // disabled because of https://github.com/kumose/kmup/issues/21355
     // {
     //   name: 'firefox',
     //   use: {

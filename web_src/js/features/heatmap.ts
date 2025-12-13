@@ -18,7 +18,7 @@ export function initHeatmap() {
       return {date: new Date(v), count: heatmap[v]};
     });
 
-    // last heatmap tooltip localization attempt https://github.com/go-kmup/kmup/pull/24131/commits/a83761cbbae3c2e3b4bced71e680f44432073ac8
+    // last heatmap tooltip localization attempt https://github.com/kumose/kmup/pull/24131/commits/a83761cbbae3c2e3b4bced71e680f44432073ac8
     const locale = {
       heatMapLocale: {
         months: new Array(12).fill(undefined).map((_, idx) => translateMonth(idx)),

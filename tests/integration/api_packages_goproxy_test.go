@@ -38,10 +38,10 @@ func TestPackageGo(t *testing.T) {
 
 	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
 
-	packageName := "kmup.com/go-kmup/kmup"
+	packageName := "kmup.com/kumose/kmup"
 	packageVersion := "v0.0.1"
 	packageVersion2 := "v0.0.2"
-	goModContent := `module "kmup.com/go-kmup/kmup"`
+	goModContent := `module "kmup.com/kumose/kmup"`
 
 	createArchive := func(files map[string][]byte) []byte {
 		var buf bytes.Buffer

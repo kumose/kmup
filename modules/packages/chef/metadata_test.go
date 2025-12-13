@@ -32,7 +32,7 @@ const (
 	packageVersion       = "1.0.1"
 	packageAuthor        = "KN4CK3R"
 	packageDescription   = "Package Description"
-	packageRepositoryURL = "https://kmup.io/kmup/kmup"
+	packageRepositoryURL = "https://github.com/kumose/kmup"
 )
 
 func TestParsePackage(t *testing.T) {

@@ -1,0 +1,2 @@
+#!/bin/bash
+exec /app/kumose/kmup config edit-ini --in-place --apply-env "$@"

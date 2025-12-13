@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	packageName    = "kmup.com/go-kmup/kmup"
+	packageName    = "kmup.com/kumose/kmup"
 	packageVersion = "v0.0.1"
 )
 
@@ -70,7 +70,7 @@ func TestParsePackage(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, packageName, p.Name)
 		assert.Equal(t, packageVersion, p.Version)
-		assert.Equal(t, "module kmup.com/go-kmup/kmup", p.GoMod)
+		assert.Equal(t, "module kmup.com/kumose/kmup", p.GoMod)
 	})
 
 	t.Run("Valid", func(t *testing.T) {

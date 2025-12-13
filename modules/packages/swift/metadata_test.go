@@ -31,7 +31,7 @@ const (
 	packageName          = "kmup"
 	packageVersion       = "1.0.1"
 	packageDescription   = "Package Description"
-	packageRepositoryURL = "https://kmup.io/kmup/kmup"
+	packageRepositoryURL = "https://github.com/kumose/kmup"
 	packageAuthor        = "KN4CK3R"
 	packageLicense       = "MIT"
 )

@@ -768,7 +768,7 @@ func TestPackageContainer(t *testing.T) {
 		})
 	}
 
-	// https://github.com/go-kmup/kmup/issues/19586
+	// https://github.com/kumose/kmup/issues/19586
 	t.Run("ParallelUpload", func(t *testing.T) {
 		defer tests.PrintCurrentTest(t)()
 

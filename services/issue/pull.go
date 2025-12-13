@@ -118,7 +118,7 @@ func PullRequestCodeOwnersReview(ctx context.Context, pr *issues_model.PullReque
 		return nil, err
 	}
 
-	// https://github.com/go-kmup/kmup/issues/29763, we need to get the files changed
+	// https://github.com/kumose/kmup/issues/29763, we need to get the files changed
 	// between the merge base and the head commit but not the base branch and the head commit
 	changedFiles, err := repo.GetFilesChangedBetween(mergeBase, pr.GetGitHeadRefName())
 	if err != nil {

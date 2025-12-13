@@ -36,139 +36,139 @@ func TestParseGitURLs(t *testing.T) {
 		expected *GitURL
 	}{
 		{
-			kase: "git@127.0.0.1:go-kmup/kmup.git",
+			kase: "git@127.0.0.1:kumose/kmup.git",
 			expected: &GitURL{
 				URL: &url.URL{
 					Scheme: "ssh",
 					User:   url.User("git"),
 					Host:   "127.0.0.1",
-					Path:   "go-kmup/kmup.git",
+					Path:   "kumose/kmup.git",
 				},
 				extraMark: 1,
 			},
 		},
 		{
-			kase: "git@[fe80::14fc:cec5:c174:d88%2510]:go-kmup/kmup.git",
+			kase: "git@[fe80::14fc:cec5:c174:d88%2510]:kumose/kmup.git",
 			expected: &GitURL{
 				URL: &url.URL{
 					Scheme: "ssh",
 					User:   url.User("git"),
 					Host:   "[fe80::14fc:cec5:c174:d88%10]",
-					Path:   "go-kmup/kmup.git",
+					Path:   "kumose/kmup.git",
 				},
 				extraMark: 1,
 			},
 		},
 		{
-			kase: "git@[::1]:go-kmup/kmup.git",
+			kase: "git@[::1]:kumose/kmup.git",
 			expected: &GitURL{
 				URL: &url.URL{
 					Scheme: "ssh",
 					User:   url.User("git"),
 					Host:   "[::1]",
-					Path:   "go-kmup/kmup.git",
+					Path:   "kumose/kmup.git",
 				},
 				extraMark: 1,
 			},
 		},
 		{
-			kase: "git@github.com:go-kmup/kmup.git",
+			kase: "git@github.com:kumose/kmup.git",
 			expected: &GitURL{
 				URL: &url.URL{
 					Scheme: "ssh",
 					User:   url.User("git"),
 					Host:   "github.com",
-					Path:   "go-kmup/kmup.git",
+					Path:   "kumose/kmup.git",
 				},
 				extraMark: 1,
 			},
 		},
 		{
-			kase: "ssh://git@github.com/go-kmup/kmup.git",
+			kase: "ssh://git@github.com/kumose/kmup.git",
 			expected: &GitURL{
 				URL: &url.URL{
 					Scheme: "ssh",
 					User:   url.User("git"),
 					Host:   "github.com",
-					Path:   "/go-kmup/kmup.git",
+					Path:   "/kumose/kmup.git",
 				},
 				extraMark: 0,
 			},
 		},
 		{
-			kase: "ssh://git@[::1]/go-kmup/kmup.git",
+			kase: "ssh://git@[::1]/kumose/kmup.git",
 			expected: &GitURL{
 				URL: &url.URL{
 					Scheme: "ssh",
 					User:   url.User("git"),
 					Host:   "[::1]",
-					Path:   "/go-kmup/kmup.git",
+					Path:   "/kumose/kmup.git",
 				},
 				extraMark: 0,
 			},
 		},
 		{
-			kase: "/repositories/go-kmup/kmup.git",
+			kase: "/repositories/kumose/kmup.git",
 			expected: &GitURL{
 				URL: &url.URL{
 					Scheme: "file",
-					Path:   "/repositories/go-kmup/kmup.git",
+					Path:   "/repositories/kumose/kmup.git",
 				},
 				extraMark: 2,
 			},
 		},
 		{
-			kase: "file:///repositories/go-kmup/kmup.git",
+			kase: "file:///repositories/kumose/kmup.git",
 			expected: &GitURL{
 				URL: &url.URL{
 					Scheme: "file",
-					Path:   "/repositories/go-kmup/kmup.git",
+					Path:   "/repositories/kumose/kmup.git",
 				},
 				extraMark: 0,
 			},
 		},
 		{
-			kase: "https://github.com/go-kmup/kmup.git",
+			kase: "https://github.com/kumose/kmup.git",
 			expected: &GitURL{
 				URL: &url.URL{
 					Scheme: "https",
 					Host:   "github.com",
-					Path:   "/go-kmup/kmup.git",
+					Path:   "/kumose/kmup.git",
 				},
 				extraMark: 0,
 			},
 		},
 		{
-			kase: "https://git:git@github.com/go-kmup/kmup.git",
+			kase: "https://git:git@github.com/kumose/kmup.git",
 			expected: &GitURL{
 				URL: &url.URL{
 					Scheme: "https",
 					Host:   "github.com",
 					User:   url.UserPassword("git", "git"),
-					Path:   "/go-kmup/kmup.git",
+					Path:   "/kumose/kmup.git",
 				},
 				extraMark: 0,
 			},
 		},
 		{
-			kase: "https://[fe80::14fc:cec5:c174:d88%2510]:20/go-kmup/kmup.git",
+			kase: "https://[fe80::14fc:cec5:c174:d88%2510]:20/kumose/kmup.git",
 			expected: &GitURL{
 				URL: &url.URL{
 					Scheme: "https",
 					Host:   "[fe80::14fc:cec5:c174:d88%10]:20",
-					Path:   "/go-kmup/kmup.git",
+					Path:   "/kumose/kmup.git",
 				},
 				extraMark: 0,
 			},
 		},
 
 		{
-			kase: "git://github.com/go-kmup/kmup.git",
+			kase: "git://github.com/kumose/kmup.git",
 			expected: &GitURL{
 				URL: &url.URL{
 					Scheme: "git",
 					Host:   "github.com",
-					Path:   "/go-kmup/kmup.git",
+					Path:   "/kumose/kmup.git",
 				},
 				extraMark: 0,
 			},

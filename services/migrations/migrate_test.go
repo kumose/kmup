@@ -42,10 +42,10 @@ func TestMigrateWhiteBlocklist(t *testing.T) {
 	err := IsMigrateURLAllowed("https://gitlab.com/gitlab/gitlab.git", nonAdminUser)
 	assert.Error(t, err)
 
-	err = IsMigrateURLAllowed("https://github.com/go-kmup/kmup.git", nonAdminUser)
+	err = IsMigrateURLAllowed("https://github.com/kumose/kmup.git", nonAdminUser)
 	assert.NoError(t, err)
 
-	err = IsMigrateURLAllowed("https://gITHUb.com/go-kmup/kmup.git", nonAdminUser)
+	err = IsMigrateURLAllowed("https://gITHUb.com/kumose/kmup.git", nonAdminUser)
 	assert.NoError(t, err)
 
 	setting.Migrations.AllowedDomains = ""
@@ -55,15 +55,15 @@ func TestMigrateWhiteBlocklist(t *testing.T) {
 	err = IsMigrateURLAllowed("https://gitlab.com/gitlab/gitlab.git", nonAdminUser)
 	assert.NoError(t, err)
 
-	err = IsMigrateURLAllowed("https://github.com/go-kmup/kmup.git", nonAdminUser)
+	err = IsMigrateURLAllowed("https://github.com/kumose/kmup.git", nonAdminUser)
 	assert.Error(t, err)
 
-	err = IsMigrateURLAllowed("https://10.0.0.1/go-kmup/kmup.git", nonAdminUser)
+	err = IsMigrateURLAllowed("https://10.0.0.1/kumose/kmup.git", nonAdminUser)
 	assert.Error(t, err)
 
 	setting.Migrations.AllowLocalNetworks = true
 	assert.NoError(t, Init())
-	err = IsMigrateURLAllowed("https://10.0.0.1/go-kmup/kmup.git", nonAdminUser)
+	err = IsMigrateURLAllowed("https://10.0.0.1/kumose/kmup.git", nonAdminUser)
 	assert.NoError(t, err)
 
 	old := setting.ImportLocalPaths

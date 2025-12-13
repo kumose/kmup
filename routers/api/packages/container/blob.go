@@ -63,7 +63,7 @@ func saveAsPackageBlob(ctx context.Context, hsr packages_module.HashedSizeReader
 			return err
 		}
 		// FIXME: Workaround to be removed in v1.20
-		// https://github.com/go-kmup/kmup/issues/19586
+		// https://github.com/kumose/kmup/issues/19586
 		if exists {
 			err = contentStore.Has(packages_module.BlobHash256Key(pb.HashSHA256))
 			if err != nil && (errors.Is(err, util.ErrNotExist) || errors.Is(err, os.ErrNotExist)) {

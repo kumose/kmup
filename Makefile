@@ -42,7 +42,7 @@ GOVULNCHECK_PACKAGE ?= golang.org/x/vuln/cmd/govulncheck@v1
 ACTIONLINT_PACKAGE ?= github.com/rhysd/actionlint/cmd/actionlint@v1
 GOPLS_PACKAGE ?= golang.org/x/tools/gopls@v0.20.0
 
-DOCKER_IMAGE ?= kmup/kmup
+DOCKER_IMAGE ?=  ghcr.io/kumose/kmup
 DOCKER_TAG ?= latest
 DOCKER_REF := $(DOCKER_IMAGE):$(DOCKER_TAG)
 
@@ -934,7 +934,7 @@ generate-manpage: ## generate manpage
 
 .PHONY: docker
 docker:
-	docker build --disable-content-trust=false -t $(DOCKER_REF) .
+	docker build --no-cache -t $(DOCKER_REF) .
 # support also build args docker build --build-arg KMUP_VERSION=v1.2.3 --build-arg TAGS="bindata sqlite sqlite_unlock_notify"  .
 
 # This endif closes the if at the top of the file

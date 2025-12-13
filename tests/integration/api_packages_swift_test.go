@@ -51,7 +51,7 @@ func TestPackageSwift(t *testing.T) {
 	packageVersion2 := "1.0.4"
 	packageAuthor := "KN4CK3R"
 	packageDescription := "Kmup Test Package"
-	packageRepositoryURL := "https://kmup.io/kmup/kmup"
+	packageRepositoryURL := "https://kmup.io/kumose/kmup"
 	contentManifest1 := "// swift-tools-version:5.7\n//\n//  Package.swift"
 	contentManifest2 := "// swift-tools-version:5.6\n//\n//  Package@swift-5.6.swift"
 

@@ -70,9 +70,9 @@ func newPayload[T any](rc payloadConvertor[T], data []byte, event webhook_module
 		// however I couldn't find in notifier.go such a payload with an HookEvent***Comment event
 
 		// History (most recent first):
-		//  - refactored in https://github.com/go-kmup/kmup/pull/12310
-		//  - assertion added in https://github.com/go-kmup/kmup/pull/12046
-		//  - issue raised in https://github.com/go-kmup/kmup/issues/11940#issuecomment-645713996
+		//  - refactored in https://github.com/kumose/kmup/pull/12310
+		//  - assertion added in https://github.com/kumose/kmup/pull/12046
+		//  - issue raised in https://github.com/kumose/kmup/issues/11940#issuecomment-645713996
 		//    > That's because for HookEventPullRequestComment event, some places use IssueCommentPayload and others use PullRequestPayload
 
 		// In modules/actions/workflows.go:183 the type assertion is always payload.(*api.IssueCommentPayload)
